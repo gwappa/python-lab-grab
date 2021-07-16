@@ -11,6 +11,7 @@ setuptools.setup(
     python_requires=">=3.7",
     install_requires=[
         'ks-tisgrabber',
+        'pyqtgraph',
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -22,6 +23,6 @@ setuptools.setup(
         # nothing for the time being
     },
     entry_points={
-        # nothing for the time being
+        'console_scripts': [ 'ic-grab=ic_grab:parse_commandline', ],
     }
 )
