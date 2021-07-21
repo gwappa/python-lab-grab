@@ -155,19 +155,35 @@ class AcquisitionSettings(_utils.ViewGroup):
                  controller=None,
                  parent=None):
         super().__init__(title=title, controller=controller, parent=parent)
-        self._rate      = _utils.FormItem("Frame rate", _QtWidgets.QDoubleSpinBox())
+        self._rate = _utils.FormItem("Frame rate (Hz)", _QtWidgets.QDoubleSpinBox())
         # set up the spin box
         # TODO: configure upon opening a device?
         self._rate.widget.setDecimals(1)
         self._rate.widget.setMaximum(200)
         self._rate.widget.setMinimum(1.0)
-        self._rate.widget.setSuffix("Hz")
         self._rate.widget.setSingleStep(0.1)
         self._rate.widget.setValue(30)
+
+        self._exposure = _utils.FormItem("Exposure (us)", _QtWidgets.QSpinBox())
+        # set up the spin box
+        # TODO: configure upon opening a device
+        self._exposure.widget.setMinimum(1)
+        self._exposure.widget.setMaximum(100000)
+        self._exposure.widget.setValue(10000)
+
+        self._gain = _utils.FormItem("Gain", _QtWidgets.QSpinBox())
+        # TODO: deal with gain settings
+
         self._triggered = _QtWidgets.QCheckBox("Use external trigger")
+        self._autoexp   = _QtWidgets.QCheckBox("Auto-exposure")
+        self._autogain  = _QtWidgets.QCheckBox("Auto-gain")
         self._addFormItem(self._rate, 0, 0)
         self._layout.addWidget(self._triggered, 0, 2,
                                alignment=_QtCore.Qt.AlignLeft)
+        self._addFormItem(self._exposure, 1, 0)
+        self._layout.addWidget(self._autoexp, 1, 2)
+        self._addFormItem(self._gain, 2, 0)
+        self._layout.addWidget(self._autogain, 2, 2)
 
         self.setEnabled(False)
         self._connectToController(self.controller)
@@ -175,9 +191,20 @@ class AcquisitionSettings(_utils.ViewGroup):
     def setEnabled(self, val):
         for obj in (self._rate, self._triggered):
             obj.setEnabled(val)
+        for obj in (self._exposure, self._autoexp):
+            obj.setEnabled(False)
+        for obj in (self._gain, self._autogain):
+            obj.setEnabled(False)
 
     def updateWithOpeningDevice(self, device):
         self.setEnabled(True)
+        self._updating = True
+        self._rate.widget.setValue(device.frame_rate)
+        if device.has_trigger:
+            self._triggered.setEnabled(True)
+        else:
+            self._triggered.setEnabled(False)
+        self._updating = False
 
     def updateWithClosingDevice(self):
         self.setEnabled(False)
