@@ -58,6 +58,7 @@ class ViewGroup(_QtWidgets.QGroupBox):
         self._controller = controller
         self._layout = _QtWidgets.QGridLayout()
         self.setLayout(self._layout)
+        self._updating = False # flag to check if it is currently updating to reflect the controller state
 
     @property
     def controller(self):

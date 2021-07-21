@@ -49,13 +49,15 @@ try:
             # create device control
             self._control = device.DeviceControl()
             self._control.message.connect(self.updateWithMessage)
-            self._device = views.DeviceSelector(controller=self._control)
-            self._frameformat = views.FrameFormatSelector(controller=self._control)
+            self._deviceselect = views.DeviceSelector(controller=self._control)
+            self._frameformat  = views.FrameFormatSettings(controller=self._control)
+            self._acquisition  = views.AcquisitionSettings(controller=self._control)
 
             # add device selector
             ## TODO: set controller for the selector, instead of setting selector for the control
-            self._layout.addWidget(self._device, 1, 1)
+            self._layout.addWidget(self._deviceselect, 1, 1)
             self._layout.addWidget(self._frameformat, 2, 1)
+            self._layout.addWidget(self._acquisition, 3, 1)
             self.statusBar() # create one
             if show == True:
                 self.show()

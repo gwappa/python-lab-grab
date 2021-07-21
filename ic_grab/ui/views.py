@@ -79,7 +79,7 @@ class DeviceSelector(_utils.ViewGroup):
         obj.openedDevice.disconnect(self.updateWithOpeningDevice)
         obj.closedDevice.disconnect(self.updateWithClosingDevice)
 
-class FrameFormatSelector(_utils.ViewGroup):
+class FrameFormatSettings(_utils.ViewGroup):
     requestedFormatUpdate = _QtCore.pyqtSignal(str)
 
     def __init__(self, title="Frame",
@@ -104,7 +104,6 @@ class FrameFormatSelector(_utils.ViewGroup):
         self.setEnabled(False)
         self._connectToController(self.controller)
         self._format.widget.currentTextChanged.connect(self.dispatchFormatUpdate)
-        self._updating = False # flag to check if it is currently updating to reflect the controller state
 
     def _connectToController(self, obj):
         self.requestedFormatUpdate.connect(obj.setFormat)
@@ -113,8 +112,10 @@ class FrameFormatSelector(_utils.ViewGroup):
         obj.updatedFormat.connect(self.updateWithFormat)
 
     def _disconnectFromController(self, obj):
+        self.requestedFormatUpdate.disconnect(obj.setFormat)
         obj.openedDevice.disconnect(self.updateWithOpeningDevice)
         obj.closedDevice.disconnect(self.updateWithClosingDevice)
+        obj.updatedFormat.disconnect(self.updateWithFormat)
 
     def setEnabled(self, val):
         for obj in (self._format,
@@ -148,3 +149,43 @@ class FrameFormatSelector(_utils.ViewGroup):
         self._updating = True
         self._format.widget.setCurrentText(fmt)
         self._updating = False
+
+class AcquisitionSettings(_utils.ViewGroup):
+    def __init__(self, title="Acquisition",
+                 controller=None,
+                 parent=None):
+        super().__init__(title=title, controller=controller, parent=parent)
+        self._rate      = _utils.FormItem("Frame rate", _QtWidgets.QDoubleSpinBox())
+        # set up the spin box
+        # TODO: configure upon opening a device?
+        self._rate.widget.setDecimals(1)
+        self._rate.widget.setMaximum(200)
+        self._rate.widget.setMinimum(1.0)
+        self._rate.widget.setSuffix("Hz")
+        self._rate.widget.setSingleStep(0.1)
+        self._rate.widget.setValue(30)
+        self._triggered = _QtWidgets.QCheckBox("Use external trigger")
+        self._addFormItem(self._rate, 0, 0)
+        self._layout.addWidget(self._triggered, 0, 2,
+                               alignment=_QtCore.Qt.AlignLeft)
+
+        self.setEnabled(False)
+        self._connectToController(self.controller)
+
+    def setEnabled(self, val):
+        for obj in (self._rate, self._triggered):
+            obj.setEnabled(val)
+
+    def updateWithOpeningDevice(self, device):
+        self.setEnabled(True)
+
+    def updateWithClosingDevice(self):
+        self.setEnabled(False)
+
+    def _connectToController(self, obj):
+        obj.openedDevice.connect(self.updateWithOpeningDevice)
+        obj.closedDevice.connect(self.updateWithClosingDevice)
+
+    def _disconnectFromController(self, obj):
+        obj.openedDevice.disconnect(self.updateWithOpeningDevice)
+        obj.closedDevice.disconnect(self.updateWithClosingDevice)
