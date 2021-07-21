@@ -11,7 +11,8 @@ setuptools.setup(
     python_requires=">=3.7",
     install_requires=[
         'ks-tisgrabber',
-        'pyqtgraph',
+        # python-opencv-headless,
+        # pyqtgraph
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
