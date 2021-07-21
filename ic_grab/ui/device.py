@@ -30,37 +30,43 @@ import tisgrabber as _tisgrabber
 from .. import LOGGER as _LOGGER
 
 class DeviceControl(_QtCore.QObject):
-    openedDevice = _QtCore.pyqtSignal(str)
-    closedDevice = _QtCore.pyqtSignal()
-    message      = _QtCore.pyqtSignal(str, str)
+    openedDevice  = _QtCore.pyqtSignal(object)
+    closedDevice  = _QtCore.pyqtSignal()
+    updatedFormat = _QtCore.pyqtSignal(str)
+    message       = _QtCore.pyqtSignal(str, str)
 
-    def __init__(self, device_selector=None, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.message.connect(self._log)
-        if device_selector is None:
-            device_selector = DeviceSelector()
-        self._selector = device_selector
-        self._selector.requestedOpeningDevice.connect(self.openDevice)
-        self._selector.requestedClosingDevice.connect(self.closeDevice)
-        self.openedDevice.connect(self._selector.updateWithOpeningDevice)
-        self.closedDevice.connect(self._selector.updateWithClosingDevice)
         self._device = None
-
-    @property
-    def selector(self):
-        return self._selector
+        self._format = None
 
     @property
     def settings(self):
         """the grabber settings as a dictionary object."""
         ret = {}
-        ret["device"] = None if self._device is None else self._device.unique_name
+        if self._device is not None:
+            ret["device"] = self._device.unique_name
+            ret["format"] = self._format
+        else:
+            ret["device"] = None
 
     @settings.setter
     def settings(self, cfg):
         device_name = ret.get("device", None)
         if device_name is not None:
             self.openDevice(device_name)
+
+    def getFormat(self):
+        return self._format
+
+    def setFormat(self, fmt):
+        ## FIXME: warn in case no device is open
+        if self._device is not None:
+            if fmt in self._device.list_video_formats():
+                self._format = fmt
+            self.updatedFormat.emit(self._format)
+            self.message.emit("info", f"current pixel format is: {self._format}")
 
     def _log(self, level, message):
         if level == "info":
@@ -75,8 +81,10 @@ class DeviceControl(_QtCore.QObject):
             _LOGGER.warning(f"<unknown level '{level}'>: {message}")
 
     def openDevice(self, device_name):
+        if self._device is not None:
+            self.closeDevice()
         self._device = _tisgrabber.Camera(device_name)
-        self.openedDevice.emit(device_name)
+        self.openedDevice.emit(self._device)
         self.message.emit("info", f"opened device: {device_name}")
 
     def closeDevice(self):
@@ -85,6 +93,10 @@ class DeviceControl(_QtCore.QObject):
         self.message.emit("info", f"closed the current device.")
         self._device = None
 
+    def currentDevice(self):
+        return self._device
+
+    ## TODO: move load/save-Settings() to a higher level (e.g. MainWindow)? 
     def saveSettings(self, path):
         path = _Path(path)
         with open(path, "w") as out:
@@ -97,121 +109,5 @@ class DeviceControl(_QtCore.QObject):
             self.settings = _json.load(src)
         self.message.emit("info", f"loaded settings from: {path.name}")
 
-class FormItem:
-    """a utility python class for handling a widget
-    along with its corresponding label."""
-    def __init__(self, label, widget):
-        self._label  = _QtWidgets.QLabel(label)
-        self._widget = widget
-
-    def setEnabled(self, val):
-        for obj in (self._label, self._widget):
-            obj.setEnabled(val)
-
-    @property
-    def label(self):
-        return self._label
-
-    @property
-    def widget(self):
-        return self._widget
-
-class ViewGroup(_QtWidgets.QGroupBox):
-    """a group box view being controlled by a DeviceControl object."""
-    def __init__(self, title="Group",
-                 controller=None,
-                 parent=None):
-        super().__init__(title, parent=parent)
-        self._controller = None
-        self._layout = _QtWidgets.QGridLayout()
-        self.setLayout(self._layout)
-        if controller is not None:
-            self.controller = controller
-
-    @property
-    def controller(self):
-        return self._controller
-
-    @controller.setter
-    def controller(self, obj):
-        if self._controller is not None:
-            self._disconnectFromController(self._controller)
-        self._controller = obj
-        self._connectToController(self._controller)
-
-    def _connectToController(self, obj):
-        """supposed to be implemented by the subclass."""
-        pass
-
-    def _disconnectFromController(self, obj):
-        """supposed to be implemented by the subclass."""
-        pass
-
-    def _addFormItem(self, item, row, col):
-        self._layout.addWidget(item.label,  row,  col, alignment=_QtCore.Qt.AlignRight)
-        self._layout.addWidget(item.widget, row, col+1)
-
-class DeviceSelector(_QtWidgets.QGroupBox):
-    LABEL_OPEN  = "Open"
-    LABEL_CLOSE = "Close"
-    requestedOpeningDevice = _QtCore.pyqtSignal(str)
-    requestedClosingDevice = _QtCore.pyqtSignal()
-
-    def __init__(self, title="Device", parent=None):
-        super().__init__(title, parent=parent)
-        self._layout = _QtWidgets.QGridLayout()
-        self.setLayout(self._layout)
-        self._box    = _QtWidgets.QComboBox()
-        for device in _tisgrabber.Camera.get_device_names():
-            self._box.addItem(device)
-        self._layout.addWidget(self._box, 0, 0)
-        self._action = _QtWidgets.QPushButton(self.LABEL_OPEN)
-        self._layout.addWidget(self._action, 0, 1)
-        self._layout.setColumnStretch(0, 3)
-        self._layout.setColumnStretch(1, 1)
-        self._action.clicked.connect(self.dispatchRequest)
-
-    def dispatchRequest(self):
-        cmd = self._action.text()
-        if cmd == self.LABEL_OPEN:
-            self.requestedOpeningDevice.emit(self._box.currentText())
-        else:
-            self.requestedClosingDevice.emit()
-
-    def updateWithOpeningDevice(self, device):
-        self._box.setCurrentText(device)
-        self._action.setText(self.LABEL_CLOSE)
-        self._box.setEnabled(False)
-
-    def updateWithClosingDevice(self):
-        self._action.setText(self.LABEL_OPEN)
-        self._box.setEnabled(True)
-
-class FrameFormatSelector(ViewGroup):
-    def __init__(self, title="Frame",
-                 controller=None,
-                 parent=None):
-        super().__init__(title=title, controller=controller, parent=parent)
-        self._format = FormItem("Format", _QtWidgets.QComboBox())
-        self._x      = FormItem("Offset X", _QtWidgets.QSpinBox())
-        self._y      = FormItem("Offset Y", _QtWidgets.QSpinBox())
-        self._w      = FormItem("Width X", _QtWidgets.QSpinBox())
-        self._h      = FormItem("Height Y", _QtWidgets.QSpinBox())
-        for row, obj in enumerate((self._format,
-                                   self._x,
-                                   self._y,
-                                   self._w,
-                                   self._h)):
-            self._addFormItem(obj, row, 0)
-        # FIXME: add saved ROI feature
-        for obj in (self._x, self._y, self._w, self._h):
-            obj.setEnabled(False)
-
-    def setEnabled(self, val):
-        for obj in (self._format,
-                    # self._x,
-                    # self._y,
-                    # self._w,
-                    # self._h,
-                    ):
-            obj.setEnabled(val)
+    device        = property(fget=currentDevice, fset=openDevice)
+    format        = property(fget=getFormat, fset=setFormat)
