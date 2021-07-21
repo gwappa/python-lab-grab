@@ -97,6 +97,60 @@ class DeviceControl(_QtCore.QObject):
             self.settings = _json.load(src)
         self.message.emit("info", f"loaded settings from: {path.name}")
 
+class FormItem:
+    """a utility python class for handling a widget
+    along with its corresponding label."""
+    def __init__(self, label, widget):
+        self._label  = _QtWidgets.QLabel(label)
+        self._widget = widget
+
+    def setEnabled(self, val):
+        for obj in (self._label, self._widget):
+            obj.setEnabled(val)
+
+    @property
+    def label(self):
+        return self._label
+
+    @property
+    def widget(self):
+        return self._widget
+
+class ViewGroup(_QtWidgets.QGroupBox):
+    """a group box view being controlled by a DeviceControl object."""
+    def __init__(self, title="Group",
+                 controller=None,
+                 parent=None):
+        super().__init__(title, parent=parent)
+        self._controller = None
+        self._layout = _QtWidgets.QGridLayout()
+        self.setLayout(self._layout)
+        if controller is not None:
+            self.controller = controller
+
+    @property
+    def controller(self):
+        return self._controller
+
+    @controller.setter
+    def controller(self, obj):
+        if self._controller is not None:
+            self._disconnectFromController(self._controller)
+        self._controller = obj
+        self._connectToController(self._controller)
+
+    def _connectToController(self, obj):
+        """supposed to be implemented by the subclass."""
+        pass
+
+    def _disconnectFromController(self, obj):
+        """supposed to be implemented by the subclass."""
+        pass
+
+    def _addFormItem(self, item, row, col):
+        self._layout.addWidget(item.label,  row,  col, alignment=_QtCore.Qt.AlignRight)
+        self._layout.addWidget(item.widget, row, col+1)
+
 class DeviceSelector(_QtWidgets.QGroupBox):
     LABEL_OPEN  = "Open"
     LABEL_CLOSE = "Close"
@@ -132,3 +186,32 @@ class DeviceSelector(_QtWidgets.QGroupBox):
     def updateWithClosingDevice(self):
         self._action.setText(self.LABEL_OPEN)
         self._box.setEnabled(True)
+
+class FrameFormatSelector(ViewGroup):
+    def __init__(self, title="Frame",
+                 controller=None,
+                 parent=None):
+        super().__init__(title=title, controller=controller, parent=parent)
+        self._format = FormItem("Format", _QtWidgets.QComboBox())
+        self._x      = FormItem("Offset X", _QtWidgets.QSpinBox())
+        self._y      = FormItem("Offset Y", _QtWidgets.QSpinBox())
+        self._w      = FormItem("Width X", _QtWidgets.QSpinBox())
+        self._h      = FormItem("Height Y", _QtWidgets.QSpinBox())
+        for row, obj in enumerate((self._format,
+                                   self._x,
+                                   self._y,
+                                   self._w,
+                                   self._h)):
+            self._addFormItem(obj, row, 0)
+        # FIXME: add saved ROI feature
+        for obj in (self._x, self._y, self._w, self._h):
+            obj.setEnabled(False)
+
+    def setEnabled(self, val):
+        for obj in (self._format,
+                    # self._x,
+                    # self._y,
+                    # self._w,
+                    # self._h,
+                    ):
+            obj.setEnabled(val)
