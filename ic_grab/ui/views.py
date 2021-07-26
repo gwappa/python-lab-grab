@@ -151,6 +151,9 @@ class FrameFormatSettings(_utils.ViewGroup):
         self._updating = False
 
 class AcquisitionSettings(_utils.ViewGroup):
+    requestedTriggerStatusUpdate = _QtCore.pyqtSignal(bool)
+    requestedFrameRateUpdate     = _QtCore.pyqtSignal(float)
+
     def __init__(self, title="Acquisition",
                  controller=None,
                  parent=None):
@@ -163,6 +166,7 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._rate.widget.setMinimum(1.0)
         self._rate.widget.setSingleStep(0.1)
         self._rate.widget.setValue(30)
+        self._rate.widget.valueChanged.connect(self.dispatchFrameRateUpdate)
 
         self._exposure = _utils.FormItem("Exposure (us)", _QtWidgets.QSpinBox())
         # set up the spin box
@@ -175,6 +179,7 @@ class AcquisitionSettings(_utils.ViewGroup):
         # TODO: deal with gain settings
 
         self._triggered = _QtWidgets.QCheckBox("Use external trigger")
+        self._triggered.stateChanged.connect(self.dispatchTriggerStatusUpdate)
         self._autoexp   = _QtWidgets.QCheckBox("Auto-exposure")
         self._autogain  = _QtWidgets.QCheckBox("Auto-gain")
         self._addFormItem(self._rate, 0, 0)
@@ -196,23 +201,53 @@ class AcquisitionSettings(_utils.ViewGroup):
         for obj in (self._gain, self._autogain):
             obj.setEnabled(False)
 
+    def dispatchTriggerStatusUpdate(self, status):
+        if self._updating == True:
+            return
+        self.requestedTriggerStatusUpdate.emit(_utils.check_status_notristate(status))
+
+    def dispatchFrameRateUpdate(self, val):
+        if self._updating == True:
+            return
+        self.requestedFrameRateUpdate.emit(val)
+
     def updateWithOpeningDevice(self, device):
         self.setEnabled(True)
         self._updating = True
         self._rate.widget.setValue(device.frame_rate)
         if device.has_trigger:
             self._triggered.setEnabled(True)
+            self._triggered.setChecked(device.triggered)
         else:
             self._triggered.setEnabled(False)
+            self._triggered.setChecked(False)
         self._updating = False
 
     def updateWithClosingDevice(self):
         self.setEnabled(False)
 
+    def updateWithTriggerStatus(self, val):
+        self._updating = True
+        self._triggered.setChecked(val)
+        self._updating = False
+
+    def updateWithFrameRate(self, val):
+        self._updating = True
+        self._rate.widget.setValue(val)
+        self._updating = False
+
     def _connectToController(self, obj):
         obj.openedDevice.connect(self.updateWithOpeningDevice)
         obj.closedDevice.connect(self.updateWithClosingDevice)
+        obj.updatedTriggerStatus.connect(self.updateWithTriggerStatus)
+        obj.updatedFrameRate.connect(self.updateWithFrameRate)
+        self.requestedTriggerStatusUpdate.connect(obj.setTriggered)
+        self.requestedFrameRateUpdate.connect(obj.setFrameRate)
 
     def _disconnectFromController(self, obj):
         obj.openedDevice.disconnect(self.updateWithOpeningDevice)
         obj.closedDevice.disconnect(self.updateWithClosingDevice)
+        obj.updatedTriggerStatus.disconnect(self.updateWithTriggerStatus)
+        obj.updatedFrameRate.disconnect(self.updateWithFrameRate)
+        self.requestedTriggerStatusUpdate.disconnect(obj.setTriggered)
+        self.requestedFrameRateUpdate.disconnect(obj.setFrameRate)

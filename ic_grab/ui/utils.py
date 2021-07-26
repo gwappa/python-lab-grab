@@ -24,6 +24,14 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
 
+def check_status_notristate(status):
+    if status == _QtCore.Qt.Unchecked:
+        return False
+    elif status == _QtCore.Qt.Checked:
+        return True
+    else:
+        raise ValueError(f"tristate check box is not supported")
+
 class FormItem:
     """a utility python class for handling a widget
     along with its corresponding label."""

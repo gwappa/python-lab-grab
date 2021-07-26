@@ -22,6 +22,7 @@
 
 from pathlib import Path as _Path
 import json as _json
+import math as _math
 from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
@@ -30,16 +31,19 @@ import tisgrabber as _tisgrabber
 from .. import LOGGER as _LOGGER
 
 class DeviceControl(_QtCore.QObject):
-    openedDevice  = _QtCore.pyqtSignal(object)
-    closedDevice  = _QtCore.pyqtSignal()
-    updatedFormat = _QtCore.pyqtSignal(str)
-    message       = _QtCore.pyqtSignal(str, str)
+    openedDevice            = _QtCore.pyqtSignal(object)
+    closedDevice            = _QtCore.pyqtSignal()
+    updatedFormat           = _QtCore.pyqtSignal(str)
+    updatedTriggerStatus    = _QtCore.pyqtSignal(bool)
+    updatedFrameRate        = _QtCore.pyqtSignal(float)
+    message                 = _QtCore.pyqtSignal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.message.connect(self._log)
-        self._device = None
-        self._format = None
+        self._device    = None
+        self._format    = None
+        self._framerate = None # TODO: store 'nominal' frame rate here...
 
     @property
     def settings(self):
@@ -66,7 +70,43 @@ class DeviceControl(_QtCore.QObject):
             if fmt in self._device.list_video_formats():
                 self._format = fmt
             self.updatedFormat.emit(self._format)
-            self.message.emit("info", f"current pixel format is: {self._format}")
+            self.message.emit("info", f"current pixel format: {self._format}")
+
+    def isTriggerAvailable(self):
+        if self._device is not None:
+            return self._device.has_trigger
+        else:
+            return False
+
+    def isTriggered(self):
+        if self._device is not None:
+            if self._device.has_trigger:
+                return self._device.triggered
+            else:
+                return False
+        else:
+            return False
+
+    def setTriggered(self, val):
+        if self._device is not None:
+            if self._device.has_trigger:
+                self._device.triggered = val
+        newVal = self.isTriggered()
+        self.updatedTriggerStatus.emit(newVal)
+        self.message.emit("info", f"trigger status: {newVal}")
+
+    def getFrameRate(self):
+        if self._device is not None:
+            return self._device.frame_rate
+        else:
+            return _math.nan
+
+    def setFrameRate(self, val):
+        if self._device is not None:
+            self._device.frame_rate = val
+        newVal = self.getFrameRate()
+        self.updatedFrameRate.emit(newVal)
+        self.message.emit("info", f"current frame rate: {newVal:.1f} Hz")
 
     def _log(self, level, message):
         if level == "info":
@@ -96,7 +136,7 @@ class DeviceControl(_QtCore.QObject):
     def currentDevice(self):
         return self._device
 
-    ## TODO: move load/save-Settings() to a higher level (e.g. MainWindow)? 
+    ## TODO: move load/save-Settings() to a higher level (e.g. MainWindow)?
     def saveSettings(self, path):
         path = _Path(path)
         with open(path, "w") as out:
@@ -111,3 +151,6 @@ class DeviceControl(_QtCore.QObject):
 
     device        = property(fget=currentDevice, fset=openDevice)
     format        = property(fget=getFormat, fset=setFormat)
+    triggered     = property(fget=isTriggered, fset=setTriggered)
+    has_trigger   = property(fget=isTriggerAvailable)
+    frame_rate    = property(fget=getFrameRate, fset=setFrameRate)
