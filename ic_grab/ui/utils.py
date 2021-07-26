@@ -24,6 +24,8 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
 
+from .. import LOGGER as _LOGGER
+
 def check_status_notristate(status):
     if status == _QtCore.Qt.Unchecked:
         return False
@@ -51,6 +53,18 @@ class FormItem:
     def widget(self):
         return self._widget
 
+class ControllerConnections:
+    def __init__(self, parent, from_controller=(), from_interface=()):
+        self._parent          = parent
+        self._from_controller = from_controller
+        self._from_interface  = from_interface
+
+    def iterate(self, controller):
+        for src, dst in self._from_controller:
+            yield (getattr(controller, src), getattr(self._parent, dst))
+        for src, dst in self._from_interface:
+            yield (getattr(self._parent, src), getattr(controller, dst))
+
 class ViewGroup(_QtWidgets.QGroupBox):
     """a group box view being controlled by a DeviceControl object.
 
@@ -61,12 +75,15 @@ class ViewGroup(_QtWidgets.QGroupBox):
     """
     def __init__(self, title="Group",
                  controller=None,
-                 parent=None):
+                 parent=None,
+                 connections=dict(from_controller=(), from_interface=())):
         super().__init__(title, parent=parent)
-        self._controller = controller
+        self._controller = None
         self._layout = _QtWidgets.QGridLayout()
         self.setLayout(self._layout)
         self._updating = False # flag to check if it is currently updating to reflect the controller state
+        self._conns    = ControllerConnections(self, **connections)
+        self.controller = controller
 
     @property
     def controller(self):
@@ -75,19 +92,29 @@ class ViewGroup(_QtWidgets.QGroupBox):
     @controller.setter
     def controller(self, obj):
         if self._controller is not None:
+            for src, dst in self._conns.iterate(self._controller):
+                src.disconnect(dst)
             self._disconnectFromController(self._controller)
         self._controller = obj
         if self._controller is not None:
+            for src, dst in self._conns.iterate(self._controller):
+                src.connect(dst)
             self._connectToController(self._controller)
 
     def _connectToController(self, obj):
-        """supposed to be implemented by the subclass.
-        `obj` can be assumed to be non-None."""
+        """may be implemented by the subclass, in case connections were
+        not supplied as the `connections` argument upon initialization.
+
+        `obj` can be assumed to be non-None.
+        """
         pass
 
     def _disconnectFromController(self, obj):
-        """supposed to be implemented by the subclass.
-        `obj` can be assumed to be non-None."""
+        """may be implemented by the subclass, in case connections were
+        not supplied as the `connections` argument upon initialization.
+
+        `obj` can be assumed to be non-None.
+        """
         pass
 
     def _addFormItem(self, item, row, col):

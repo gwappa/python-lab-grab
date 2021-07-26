@@ -39,7 +39,19 @@ class DeviceSelector(_utils.ViewGroup):
                  title="Device",
                  controller=None,
                  parent=None):
-        super().__init__(title=title, controller=controller, parent=parent)
+        super().__init__(title=title,
+                         controller=controller,
+                         parent=parent,
+                         connections=dict(
+                            from_controller=(
+                                ("openedDevice", "updateWithOpeningDevice"),
+                                ("closedDevice", "updateWithClosingDevice"),
+                            ),
+                            from_interface=(
+                                ("requestedOpeningDevice", "openDevice"),
+                                ("requestedClosingDevice", "closeDevice"),
+                            )
+                         ))
         self._box    = _QtWidgets.QComboBox()
         for device in _tisgrabber.Camera.get_device_names():
             self._box.addItem(device)
@@ -49,7 +61,6 @@ class DeviceSelector(_utils.ViewGroup):
         self._layout.setColumnStretch(0, 3)
         self._layout.setColumnStretch(1, 1)
         self._action.clicked.connect(self.dispatchRequest)
-        self._connectToController(self.controller)
 
     def dispatchRequest(self):
         cmd = self._action.text()
@@ -67,25 +78,25 @@ class DeviceSelector(_utils.ViewGroup):
         self._action.setText(self.LABEL_OPEN)
         self._box.setEnabled(True)
 
-    def _connectToController(self, obj):
-        self.requestedOpeningDevice.connect(obj.openDevice)
-        self.requestedClosingDevice.connect(obj.closeDevice)
-        obj.openedDevice.connect(self.updateWithOpeningDevice)
-        obj.closedDevice.connect(self.updateWithClosingDevice)
-
-    def _disconnectFromController(self, obj):
-        self.requestedOpeningDevice.disconnect(obj.openDevice)
-        self.requestedClosingDevice.disconnect(obj.closeDevice)
-        obj.openedDevice.disconnect(self.updateWithOpeningDevice)
-        obj.closedDevice.disconnect(self.updateWithClosingDevice)
-
 class FrameFormatSettings(_utils.ViewGroup):
     requestedFormatUpdate = _QtCore.pyqtSignal(str)
 
     def __init__(self, title="Frame",
                  controller=None,
                  parent=None):
-        super().__init__(title=title, controller=controller, parent=parent)
+        super().__init__(title=title,
+                         controller=controller,
+                         parent=parent,
+                         connections=dict(
+                            from_controller=(
+                                ("openedDevice", "updateWithOpeningDevice"),
+                                ("closedDevice", "updateWithClosingDevice"),
+                                ("updatedFormat", "updateWithFormat"),
+                            ),
+                            from_interface=(
+                                ("requestedFormatUpdate", "setFormat"),
+                            )
+                         ))
         self._format = _utils.FormItem("Format", _QtWidgets.QComboBox())
         self._x      = _utils.FormItem("Offset X", _QtWidgets.QSpinBox())
         self._y      = _utils.FormItem("Offset Y", _QtWidgets.QSpinBox())
@@ -102,20 +113,7 @@ class FrameFormatSettings(_utils.ViewGroup):
             obj.setEnabled(False)
 
         self.setEnabled(False)
-        self._connectToController(self.controller)
         self._format.widget.currentTextChanged.connect(self.dispatchFormatUpdate)
-
-    def _connectToController(self, obj):
-        self.requestedFormatUpdate.connect(obj.setFormat)
-        obj.openedDevice.connect(self.updateWithOpeningDevice)
-        obj.closedDevice.connect(self.updateWithClosingDevice)
-        obj.updatedFormat.connect(self.updateWithFormat)
-
-    def _disconnectFromController(self, obj):
-        self.requestedFormatUpdate.disconnect(obj.setFormat)
-        obj.openedDevice.disconnect(self.updateWithOpeningDevice)
-        obj.closedDevice.disconnect(self.updateWithClosingDevice)
-        obj.updatedFormat.disconnect(self.updateWithFormat)
 
     def setEnabled(self, val):
         for obj in (self._format,
@@ -157,7 +155,21 @@ class AcquisitionSettings(_utils.ViewGroup):
     def __init__(self, title="Acquisition",
                  controller=None,
                  parent=None):
-        super().__init__(title=title, controller=controller, parent=parent)
+        super().__init__(title=title,
+                         controller=controller,
+                         parent=parent,
+                         connections=dict(
+                            from_controller=(
+                                ("openedDevice", "updateWithOpeningDevice"),
+                                ("closedDevice", "updateWithClosingDevice"),
+                                ("updatedTriggerStatus", "updateWithTriggerStatus"),
+                                ("updatedFrameRate", "updateWithFrameRate"),
+                            ),
+                            from_interface=(
+                                ("requestedTriggerStatusUpdate", "setTriggered"),
+                                ("requestedFrameRateUpdate", "setFrameRate"),
+                            )
+                         ))
         self._rate = _utils.FormItem("Frame rate (Hz)", _QtWidgets.QDoubleSpinBox())
         # set up the spin box
         # TODO: configure upon opening a device?
@@ -191,7 +203,6 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._layout.addWidget(self._autogain, 2, 2)
 
         self.setEnabled(False)
-        self._connectToController(self.controller)
 
     def setEnabled(self, val):
         for obj in (self._rate, self._triggered):
@@ -235,19 +246,3 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._updating = True
         self._rate.widget.setValue(val)
         self._updating = False
-
-    def _connectToController(self, obj):
-        obj.openedDevice.connect(self.updateWithOpeningDevice)
-        obj.closedDevice.connect(self.updateWithClosingDevice)
-        obj.updatedTriggerStatus.connect(self.updateWithTriggerStatus)
-        obj.updatedFrameRate.connect(self.updateWithFrameRate)
-        self.requestedTriggerStatusUpdate.connect(obj.setTriggered)
-        self.requestedFrameRateUpdate.connect(obj.setFrameRate)
-
-    def _disconnectFromController(self, obj):
-        obj.openedDevice.disconnect(self.updateWithOpeningDevice)
-        obj.closedDevice.disconnect(self.updateWithClosingDevice)
-        obj.updatedTriggerStatus.disconnect(self.updateWithTriggerStatus)
-        obj.updatedFrameRate.disconnect(self.updateWithFrameRate)
-        self.requestedTriggerStatusUpdate.disconnect(obj.setTriggered)
-        self.requestedFrameRateUpdate.disconnect(obj.setFrameRate)
