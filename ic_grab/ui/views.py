@@ -29,6 +29,12 @@ import tisgrabber as _tisgrabber
 from . import utils as _utils
 from .. import LOGGER as _LOGGER
 
+def setDirty(widget):
+    widget.setStyleSheet("color: red")
+
+def clearDirty(widget):
+    widget.setStyleSheet("")
+
 class DeviceSelector(_utils.ViewGroup):
     LABEL_OPEN  = "Open"
     LABEL_CLOSE = "Close"
@@ -178,7 +184,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._rate.widget.setMinimum(1.0)
         self._rate.widget.setSingleStep(0.1)
         self._rate.widget.setValue(30)
-        self._rate.widget.valueChanged.connect(self.dispatchFrameRateUpdate)
+        self._rate.widget.valueChanged.connect(self.invalidateFrameRate)
+        self._rate.widget.editingFinished.connect(self.dispatchFrameRateUpdate)
 
         self._exposure = _utils.FormItem("Exposure (us)", _QtWidgets.QSpinBox())
         # set up the spin box
@@ -212,15 +219,20 @@ class AcquisitionSettings(_utils.ViewGroup):
         for obj in (self._gain, self._autogain):
             obj.setEnabled(False)
 
+    def invalidateFrameRate(self, _):
+        if self._updating == True:
+            return
+        setDirty(self._rate.widget)
+
     def dispatchTriggerStatusUpdate(self, status):
         if self._updating == True:
             return
         self.requestedTriggerStatusUpdate.emit(_utils.check_status_notristate(status))
 
-    def dispatchFrameRateUpdate(self, val):
+    def dispatchFrameRateUpdate(self):
         if self._updating == True:
             return
-        self.requestedFrameRateUpdate.emit(val)
+        self.requestedFrameRateUpdate.emit(self._rate.widget.value())
 
     def updateWithOpeningDevice(self, device):
         self.setEnabled(True)
@@ -245,4 +257,5 @@ class AcquisitionSettings(_utils.ViewGroup):
     def updateWithFrameRate(self, val):
         self._updating = True
         self._rate.widget.setValue(val)
+        clearDirty(self._rate.widget)
         self._updating = False
