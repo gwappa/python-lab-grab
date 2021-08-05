@@ -75,14 +75,14 @@ class DeviceSettings:
         return self._format
 
     @format.setter
-    def format(self, value):
+    def format(self, format_name):
         ## FIXME: warn in case no device is open
         if self.device is not None:
-            if fmt in self.device.list_video_formats():
-                self._format = value # FIXME: update device
+            if format_name in self.device.list_video_formats():
+                self.device.video_format = format_name
             if self._parent is not None:
                 self._parent.updatedFormat.emit(self._format)
-            self._settings.update()
+            self.update()
 
     @property
     def has_trigger(self):
@@ -118,7 +118,12 @@ class DeviceSettings:
         self._rate.available = (self.device is not None)
         if self.device is None:
             return
-        elif not self.device.has_trigger:
+
+        self._format = self.device.video_format
+        if self._parent is not None:
+            self._parent.updatedFormat.emit(self._format)
+
+        if not self.device.has_trigger:
             self._rate.triggered = False
             self._rate.value     = self.device.frame_rate
         else:
@@ -153,7 +158,7 @@ class DeviceControl(_QtCore.QObject):
 
     def setFormat(self, fmt):
         self._settings.format = fmt
-        self.message.emit("info", f"current pixel format: {self._settings.format}")
+        self.message.emit("info", f"current frame format: {self._settings.format}")
 
     def isTriggerAvailable(self):
         return self._settings.has_trigger
