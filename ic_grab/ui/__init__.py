@@ -33,7 +33,7 @@ try:
 
     class MainWindow(_QtWidgets.QMainWindow):
         DEFAULT_TITLE    = "IC-GRAB"
-        DEFAULT_GEOMETRY = (100, 100, 800, 640) # X, Y, W, H
+        DEFAULT_GEOMETRY = (100, 100, 1000, 640) # X, Y, W, H
 
         def __init__(self, title=None, parent=None, show=True):
             super().__init__(parent=parent)
@@ -52,12 +52,23 @@ try:
             self._deviceselect = views.DeviceSelector(controller=self._control)
             self._frameformat  = views.FrameFormatSettings(controller=self._control)
             self._acquisition  = views.AcquisitionSettings(controller=self._control)
+            self._frame        = _QtWidgets.QWidget()
 
-            # add device selector
-            ## TODO: set controller for the selector, instead of setting selector for the control
-            self._layout.addWidget(self._deviceselect, 1, 1)
-            self._layout.addWidget(self._frameformat, 2, 1)
-            self._layout.addWidget(self._acquisition, 3, 1)
+            # add commands bar
+            self._commands     = commands.CommandBar()
+
+            # add child components to the main widget
+            self._layout.addWidget(self._frame, 0, 0, 3, 1)
+            self._layout.addWidget(self._deviceselect, 0, 1)
+            self._layout.addWidget(self._frameformat, 1, 1)
+            self._layout.addWidget(self._acquisition, 2, 1)
+            self._layout.addWidget(self._commands, 3, 0, 1, 2)
+            self._layout.setColumnStretch(0, 2)
+            self._layout.setColumnStretch(1, 1)
+            self._layout.setRowStretch(0, 2)
+            self._layout.setRowStretch(1, 5)
+            self._layout.setRowStretch(2, 5)
+            self._layout.setRowStretch(3, 1)
             self.statusBar() # create one
             if show == True:
                 self.show()
@@ -70,6 +81,7 @@ try:
 
     from . import device
     from . import views
+    from . import commands
 
 except ImportError:
     raise RuntimeError("an error occurred while attempting to import 'pyqtgraph'. install it, or fix the installation.")
