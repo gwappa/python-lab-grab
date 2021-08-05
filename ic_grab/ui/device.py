@@ -30,6 +30,102 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
 import tisgrabber as _tisgrabber
 from .. import LOGGER as _LOGGER
 
+class FrameRateSettings:
+    def __init__(self, rate=_math.nan, available=True, parent=None):
+        self._parent    = parent
+        self.available  = available
+        self._value     = rate
+        self._triggered = False
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, value):
+        self._value = value
+        if self.available and (self._parent is not None):
+            self._parent.updatedFrameRate.emit(value)
+
+    @property
+    def triggered(self):
+        return self._triggered
+
+    @triggered.setter
+    def triggered(self, status):
+        self._triggered = status
+        if self.available and (self._parent is not None):
+            self._parent.updatedTriggerStatus.emit(status)
+
+class DeviceSettings:
+    def __init__(self, parent=None):
+        self._parent = parent
+        self.device  = None
+        self._format = None
+        self._rate   = FrameRateSettings(available=False, parent=parent)
+
+    def as_dict(self):
+        raise NotImplementedError() # FIXME
+
+    def load_dict(self, cfg):
+        raise NotImplementedError() # FIXME
+
+    @property
+    def format(self):
+        return self._format
+
+    @format.setter
+    def format(self, value):
+        ## FIXME: warn in case no device is open
+        if self.device is not None:
+            if fmt in self.device.list_video_formats():
+                self._format = value # FIXME: update device
+            if self._parent is not None:
+                self._parent.updatedFormat.emit(self._format)
+            self._settings.update()
+
+    @property
+    def has_trigger(self):
+        if self.device is None:
+            return False
+        else:
+            return self.device.has_trigger
+
+    @property
+    def triggered(self):
+        return self._rate.triggered
+
+    @triggered.setter
+    def triggered(self, status):
+        if self.device is not None:
+            if self.device.has_trigger:
+                self.device.triggered = status
+        self.update()
+
+    @property
+    def frame_rate(self):
+        return self._rate.value
+
+    @frame_rate.setter
+    def frame_rate(self, value):
+        if (self.device is not None) and (not self.device.triggered):
+            self.device.frame_rate = value
+            self.update()
+        else:
+            self._rate.value = value
+
+    def update(self):
+        self._rate.available = (self.device is not None)
+        if self.device is None:
+            return
+        elif not self.device.has_trigger:
+            self._rate.triggered = False
+            self._rate.value     = self.device.frame_rate
+        else:
+            self._rate.triggered = self.device.triggered
+            if not self.device.triggered:
+                self._rate.value = self.device.frame_rate
+
 class DeviceControl(_QtCore.QObject):
     openedDevice            = _QtCore.pyqtSignal(object)
     closedDevice            = _QtCore.pyqtSignal()
@@ -41,72 +137,40 @@ class DeviceControl(_QtCore.QObject):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.message.connect(self._log)
-        self._device    = None
-        self._format    = None
-        self._framerate = None # TODO: store 'nominal' frame rate here...
+        self._settings = DeviceSettings(parent=self)
 
     @property
     def settings(self):
         """the grabber settings as a dictionary object."""
-        ret = {}
-        if self._device is not None:
-            ret["device"] = self._device.unique_name
-            ret["format"] = self._format
-        else:
-            ret["device"] = None
+        return self._settings.as_dict() # FIXME
 
     @settings.setter
     def settings(self, cfg):
-        device_name = ret.get("device", None)
-        if device_name is not None:
-            self.openDevice(device_name)
+        self._settings.load_dict(cfg) # FIXME
 
     def getFormat(self):
-        return self._format
+        return self._settings.format
 
     def setFormat(self, fmt):
-        ## FIXME: warn in case no device is open
-        if self._device is not None:
-            if fmt in self._device.list_video_formats():
-                self._format = fmt
-            self.updatedFormat.emit(self._format)
-            self.message.emit("info", f"current pixel format: {self._format}")
+        self._settings.format = fmt
+        self.message.emit("info", f"current pixel format: {self._settings.format}")
 
     def isTriggerAvailable(self):
-        if self._device is not None:
-            return self._device.has_trigger
-        else:
-            return False
+        return self._settings.has_trigger
 
     def isTriggered(self):
-        if self._device is not None:
-            if self._device.has_trigger:
-                return self._device.triggered
-            else:
-                return False
-        else:
-            return False
+        self._settings.triggered
 
     def setTriggered(self, val):
-        if self._device is not None:
-            if self._device.has_trigger:
-                self._device.triggered = val
-        newVal = self.isTriggered()
-        self.updatedTriggerStatus.emit(newVal)
-        self.message.emit("info", f"trigger status: {newVal}")
+        self._settings.triggered = val
+        self.message.emit("info", f"trigger status: {self._settings.triggered}")
 
     def getFrameRate(self):
-        if self._device is not None:
-            return self._device.frame_rate
-        else:
-            return _math.nan
+        return self._settings.frame_rate
 
     def setFrameRate(self, val):
-        if self._device is not None:
-            self._device.frame_rate = val
-        newVal = self.getFrameRate()
-        self.updatedFrameRate.emit(newVal)
-        self.message.emit("info", f"current frame rate: {newVal:.1f} Hz")
+        self._settings.frame_rate = val
+        self.message.emit("info", f"current frame rate: {self._settings.frame_rate:.1f} Hz")
 
     def _log(self, level, message):
         if level == "info":
@@ -121,29 +185,31 @@ class DeviceControl(_QtCore.QObject):
             _LOGGER.warning(f"<unknown level '{level}'>: {message}")
 
     def openDevice(self, device_name):
-        if self._device is not None:
+        if self._settings.device is not None:
             self.closeDevice()
-        self._device = _tisgrabber.Camera(device_name)
-        self.openedDevice.emit(self._device)
+        self._settings.device = _tisgrabber.Camera(device_name)
+        self.openedDevice.emit(self._settings.device)
         self.message.emit("info", f"opened device: {device_name}")
 
     def closeDevice(self):
-        self._device.close()
+        self._settings.device.close()
         self.closedDevice.emit()
         self.message.emit("info", f"closed the current device.")
-        self._device = None
+        self._settings.device = None
 
     def currentDevice(self):
-        return self._device
+        return self._settings.device
 
     ## TODO: move load/save-Settings() to a higher level (e.g. MainWindow)?
     def saveSettings(self, path):
+        raise NotImplementedError() # FIXME
         path = _Path(path)
         with open(path, "w") as out:
             _json.dump(self.settings, out, indent=4)
         self.message.emit("info", f"saved settings to: {path.name}")
 
     def loadSettings(self, path):
+        raise NotImplementedError() # FIXME
         path = _Path(path)
         with open(path, "r") as src:
             self.settings = _json.load(src)
