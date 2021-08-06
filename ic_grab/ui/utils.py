@@ -20,6 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import re as _re
+from collections import namedtuple as _namedtuple
+
 from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
@@ -33,6 +36,26 @@ def check_status_notristate(status):
         return True
     else:
         raise ValueError(f"tristate check box is not supported")
+
+class AcquisitionModes:
+    FOCUS   = "FOCUS" # start FOCUS mode
+    GRAB    = "GRAB"  # start GRAB mode
+    IDLE    = "ABORT" # stop the current acquisition
+    
+class FrameFormat(_namedtuple("_FrameFormat", ("pixel", "width", "height"))):
+    FORMAT_PATTERN = _re.compile(r"([a-zA-Z0-9-]+) \((\d+)x(\d+)\)")
+
+    @classmethod
+    def from_name(cls, format_name):
+        matched = cls.FORMAT_PATTERN.match(format_name)
+        if not matched:
+            raise RuntimeError(f"unexpected format name: {format_name}")
+        pixel, width, height = [matched.group(i) for i in (1, 2, 3)]
+        return cls(pixel, int(width), int(height))
+
+    @property
+    def shape(self):
+        return (self.width, self.height)
 
 class FormItem:
     """a utility python class for handling a widget

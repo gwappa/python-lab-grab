@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import numpy as _np
+
 import pyqtgraph as _pg
 from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
@@ -36,16 +38,34 @@ def setDirty(widget):
 def clearDirty(widget):
     widget.setStyleSheet("")
 
-class FrameView(_pg.GraphicsLayoutWidget):
-    INITIAL_DIMS = (640, 480)
+class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
+    INITIAL_DIMS   = (640, 480)
+    DEFAULT_COLOR  = (255, 255, 255, 255)
 
     def __init__(self, controller=None, parent=None):
-        _pg.GraphicsLayoutWidget.__init__(self, parent=parent)
-        self._viewbox = self.addViewBox()
-        self._viewbox.setAspectLocked(True)
+        _QtWidgets.QGraphicsView.__init__(self, parent=parent)
+        self._scene   = _QtWidgets.QGraphicsScene()
         self._image   = _pg.ImageItem()
-        self._viewbox.addItem(self._image)
-        self._viewbox.setRange(_QtCore.QRectF(0, 0, *self.INITIAL_DIMS))
+        self._scene.addItem(self._image)
+        self._scene.setSceneRect(_QtCore.QRectF(0, 0, *self.INITIAL_DIMS))
+        self.setScene(self._scene)
+        _utils.ControllerInterface.__init__(self, controller=controller,
+                                            connections=dict(
+                                                from_controller=(
+                                                    ("updatedFormat", "updateWithFormat"),
+                                                ),
+                                                from_interface=(
+
+                                                )
+                                            ))
+    def updateWithFormat(self, format_name):
+        if len(format_name) == 0:
+            return
+        fmt  = _utils.FrameFormat.from_name(format_name)
+        dims = fmt.shape
+        self._scene.setSceneRect(_QtCore.QRectF(0, 0, *dims))
+        self._image.setImage(_np.zeros(dims, dtype=_np.uint8))
+        # TODO: set transform to fit the image to the rect
 
 class DeviceSelector(_utils.ViewGroup):
     LABEL_OPEN  = "Open"
@@ -64,6 +84,7 @@ class DeviceSelector(_utils.ViewGroup):
                             from_controller=(
                                 ("openedDevice", "updateWithOpeningDevice"),
                                 ("closedDevice", "updateWithClosingDevice"),
+                                ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
                             ),
                             from_interface=(
                                 ("requestedOpeningDevice", "openDevice"),
@@ -96,6 +117,9 @@ class DeviceSelector(_utils.ViewGroup):
         self._action.setText(self.LABEL_OPEN)
         self._box.setEnabled(True)
 
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        self._action.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+
 class FrameFormatSettings(_utils.ViewGroup):
     requestedFormatUpdate = _QtCore.pyqtSignal(str)
 
@@ -110,6 +134,7 @@ class FrameFormatSettings(_utils.ViewGroup):
                                 ("openedDevice", "updateWithOpeningDevice"),
                                 ("closedDevice", "updateWithClosingDevice"),
                                 ("updatedFormat", "updateWithFormat"),
+                                ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
                             ),
                             from_interface=(
                                 ("requestedFormatUpdate", "setFormat"),
@@ -166,6 +191,9 @@ class FrameFormatSettings(_utils.ViewGroup):
         self._format.widget.setCurrentText(fmt)
         self._updating = False
 
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+
 class AcquisitionSettings(_utils.ViewGroup):
     requestedTriggerStatusUpdate = _QtCore.pyqtSignal(bool)
     requestedFrameRateUpdate     = _QtCore.pyqtSignal(float)
@@ -182,6 +210,7 @@ class AcquisitionSettings(_utils.ViewGroup):
                                 ("closedDevice", "updateWithClosingDevice"),
                                 ("updatedTriggerStatus", "updateWithTriggerStatus"),
                                 ("updatedFrameRate", "updateWithFrameRate"),
+                                ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
                             ),
                             from_interface=(
                                 ("requestedTriggerStatusUpdate", "setTriggered"),
@@ -271,3 +300,6 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._rate.widget.setValue(val)
         clearDirty(self._rate.widget)
         self._updating = False
+
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
