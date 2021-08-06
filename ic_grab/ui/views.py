@@ -305,8 +305,13 @@ class AcquisitionSettings(_utils.ViewGroup):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
 
 class ExperimentSettings(_utils.ViewGroup):
+    requestSubjectUpdate = _QtCore.pyqtSignal(str)
+    requestDomainUpdate  = _QtCore.pyqtSignal(str)
+    requestDateUpdate    = _QtCore.pyqtSignal(_QtCore.QDate)
+
     def __init__(self, title="Experiment",
                  controller=None,
+                 experiment=None,
                  parent=None):
         super().__init__(title, parent=parent,
                          controller=controller,
@@ -318,26 +323,129 @@ class ExperimentSettings(_utils.ViewGroup):
 
                             )
                          ))
-        self._subject = _utils.FormItem("Subject", _QtWidgets.QLineEdit("nosubject"))
-        self._date    = _utils.FormItem("Date", _QtWidgets.QDateEdit(_QtCore.QDate.currentDate()))
-        self._index   = _utils.FormItem("Run index", _QtWidgets.QSpinBox())
-        self._autoinc = _QtWidgets.QCheckBox("Auto-increment")
-        self._domain  = _utils.FormItem("Domain", _QtWidgets.QLineEdit("Camera"))
-        self._addFormItem(self._subject,   0, 0, widget_colspan=2)
-        self._addFormItem(self._date,      1, 0, widget_colspan=2)
-        self._addFormItem(self._index,     2, 0, widget_colspan=1)
-        self._addFormItem(self._domain,    3, 0, widget_colspan=2)
-        self._layout.addWidget(self._autoinc, 2, 2)
+        self._exp_conns  = _utils.ControllerConnections(self,
+                                from_controller=(
+                                    ("updatedSubject", "updateWithSubject"),
+                                    ("updatedDomain",  "updateWithDomain"),
+                                    ("updatedDate",    "updateWithDate"),
+                                ),
+                                from_interface=(
+                                    ("requestSubjectUpdate", "setSubject"),
+                                    ("requestDomainUpdate",  "setDomain"),
+                                    ("requestDateUpdate",    "setQDate"),
+                                )
+                           )
+        self._experiment = None
+        self.experiment  = experiment
+
+        self._subject = _utils.FormItem("Subject", _QtWidgets.QLineEdit(self.subject))
+        self._date    = _utils.FormItem("Date", _QtWidgets.QDateEdit(self.date))
+        self._domain  = _utils.FormItem("Domain", _QtWidgets.QLineEdit(self.domain))
+        self._addFormItem(self._subject,   0, 0)
+        self._addFormItem(self._date,      1, 0)
+        self._addFormItem(self._domain,    2, 0)
+        self._layout.setColumnStretch(0, 2)
+        self._layout.setColumnStretch(1, 3)
+
+        self._date.widget.setDisplayFormat(self.qDate_format)
+        self._date.widget.setCalendarPopup(True)
+
+        self._subject.widget.textChanged.connect(self.subjectEditCallback)
+        self._subject.widget.editingFinished.connect(self.dispatchSubjectUpdate)
+        self._domain.widget.textChanged.connect(self.domainEditCallback)
+        self._domain.widget.editingFinished.connect(self.dispatchDomainUpdate)
+        self._date.widget.dateChanged.connect(self.dispatchDateUpdate)
+
+        self._updating = False
+
+    @property
+    def experiment(self):
+        return self._experiment
+
+    @experiment.setter
+    def experiment(self, obj):
+        if self._experiment is not None:
+            for src, dst in self._exp_conns.iterate(self._experiment):
+                src.disconnect(dst)
+        self._experiment = obj
+        if self._experiment is not None:
+            for src, dst in self._exp_conns.iterate(self._experiment):
+                src.connect(dst)
+
+    @property
+    def date(self):
+        if self._experiment is None:
+            return _QtCore.QDate.currentDate()
+        else:
+            return self._experiment.qDate
+
+    @property
+    def subject(self):
+        if self._experiment is None:
+            return "nosubject"
+        else:
+            return self._experiment.subject
+
+    @property
+    def domain(self):
+        if self._experiment is None:
+            return "Camera"
+        else:
+            return self._experiment.domain
+
+    @property
+    def qDate_format(self):
+        if self._experiment is None:
+            return "yyyy-MM-dd"
+        else:
+            self._experiment.qDate_format
 
     def setEnabled(self, status):
-        for obj in (self._subject, self._date, self._index, self._autoinc, self._domain):
+        for obj in (self._subject, self._date, self._domain):
             obj.setEnabled(status)
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
 
+    def subjectEditCallback(self, _):
+        if not self._updating:
+            setDirty(self._subject.widget)
+
+    def domainEditCallback(self, _):
+        if not self._updating:
+            setDirty(self._domain.widget)
+
+    def dispatchSubjectUpdate(self):
+        if not self._updating:
+            self.requestSubjectUpdate.emit(self._subject.widget.text())
+
+    def dispatchDomainUpdate(self):
+        if not self._updating:
+            self.requestDomainUpdate.emit(self._domain.widget.text())
+
+    def dispatchDateUpdate(self, value):
+        if not self._updating:
+            self.requestDateUpdate.emit(value)
+
+    def updateWithSubject(self, value):
+        self._updating = True
+        clearDirty(self._subject.widget)
+        self._subject.widget.setText(value)
+        self._updating = False
+
+    def updateWithDomain(self, value):
+        self._updating = True
+        clearDirty(self._domain.widget)
+        self._domain.widget.setText(value)
+        self._updating = False
+
+    def updateWithDate(self, year, month, day):
+        self._updating = True
+        self._date.widget.setDate(_QtCore.QDate(year, month, day))
+        self._updating = False
+
 class StorageSettings(_utils.ViewGroup):
-    DEFAULT_NAME_PATTERN = "{subject}_{date}_{domain}_{index}"
+    DEFAULT_NAME_PATTERN = "{subject}_{date}_{domain}_{time}"
 
     def __init__(self, title="Storage",
                  controller=None,
