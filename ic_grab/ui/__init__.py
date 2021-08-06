@@ -52,7 +52,7 @@ try:
             self._deviceselect = views.DeviceSelector(controller=self._control)
             self._frameformat  = views.FrameFormatSettings(controller=self._control)
             self._acquisition  = views.AcquisitionSettings(controller=self._control)
-            self._frame        = _QtWidgets.QWidget()
+            self._frame        = views.FrameView(controller=self._control)
 
             # add commands bar
             self._commands     = commands.CommandBar(controller=self._control)

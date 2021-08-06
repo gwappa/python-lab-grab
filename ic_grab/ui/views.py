@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import pyqtgraph as _pg
 from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
@@ -34,6 +35,17 @@ def setDirty(widget):
 
 def clearDirty(widget):
     widget.setStyleSheet("")
+
+class FrameView(_pg.GraphicsLayoutWidget):
+    INITIAL_DIMS = (640, 480)
+
+    def __init__(self, controller=None, parent=None):
+        _pg.GraphicsLayoutWidget.__init__(self, parent=parent)
+        self._viewbox = self.addViewBox()
+        self._viewbox.setAspectLocked(True)
+        self._image   = _pg.ImageItem()
+        self._viewbox.addItem(self._image)
+        self._viewbox.setRange(_QtCore.QRectF(0, 0, *self.INITIAL_DIMS))
 
 class DeviceSelector(_utils.ViewGroup):
     LABEL_OPEN  = "Open"
