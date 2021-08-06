@@ -55,7 +55,7 @@ try:
             self._frame        = _QtWidgets.QWidget()
 
             # add commands bar
-            self._commands     = commands.CommandBar()
+            self._commands     = commands.CommandBar(controller=self._control)
 
             # add child components to the main widget
             self._layout.addWidget(self._frame, 0, 0, 3, 1)

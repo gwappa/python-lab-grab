@@ -65,22 +65,11 @@ class ControllerConnections:
         for src, dst in self._from_interface:
             yield (getattr(self._parent, src), getattr(controller, dst))
 
-class ViewGroup(_QtWidgets.QGroupBox):
-    """a group box view being controlled by a DeviceControl object.
-
-    important note
-    --------------
-    The first _connectToController() will _not_ be called by ViewGroup.__init__().
-    It must be instead called explicitly during initialization of the subclass.
-    """
-    def __init__(self, title="Group",
-                 controller=None,
-                 parent=None,
+class ControllerInterface:
+    """the mix-in class to manage connections with the device controller."""
+    def __init__(self, controller=None,
                  connections=dict(from_controller=(), from_interface=())):
-        super().__init__(title, parent=parent)
         self._controller = None
-        self._layout = _QtWidgets.QGridLayout()
-        self.setLayout(self._layout)
         self._updating = False # flag to check if it is currently updating to reflect the controller state
         self._conns    = ControllerConnections(self, **connections)
         self.controller = controller
@@ -116,6 +105,19 @@ class ViewGroup(_QtWidgets.QGroupBox):
         `obj` can be assumed to be non-None.
         """
         pass
+
+class ViewGroup(_QtWidgets.QGroupBox, ControllerInterface):
+    """a group box view being controlled by a DeviceControl object."""
+    def __init__(self, title="Group",
+                 controller=None,
+                 parent=None,
+                 connections=dict(from_controller=(), from_interface=())):
+        _QtWidgets.QGroupBox.__init__(self, title, parent=parent)
+        self._layout = _QtWidgets.QGridLayout()
+        self.setLayout(self._layout)
+        ControllerInterface.__init__(self,
+                                     controller=controller,
+                                     connections=connections)
 
     def _addFormItem(self, item, row, col):
         self._layout.addWidget(item.label,  row,  col, alignment=_QtCore.Qt.AlignRight)

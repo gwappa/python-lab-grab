@@ -44,23 +44,73 @@ class CommandBar(_QtWidgets.QWidget):
         self._layout.addWidget(self._focus)
         self._layout.addWidget(self._grab)
 
-class CommandButton(_QtWidgets.QPushButton):
-    def __init__(self, label, controller=None, parent=None):
-        super().__init__(label, parent=parent)
+class CommandButton(_QtWidgets.QPushButton, _utils.ControllerInterface):
+    def __init__(self, label, controller=None, parent=None,
+                 connections=dict(from_controller=(), from_interface=())):
+        _QtWidgets.QPushButton.__init__(self, label, parent=parent)
         self.setEnabled(False)
+        _utils.ControllerInterface.__init__(self,
+                                            controller=controller,
+                                            connections=connections)
 
 class SaveConfigButton(CommandButton):
     def __init__(self, label="Save...", controller=None, parent=None):
-        super().__init__(label, controller=controller, parent=parent)
+        super().__init__(label, controller=controller, parent=parent,
+                         connections=dict(
+                            from_controller=(
+
+                            ),
+                            from_interface=(
+
+                            )
+                         ))
 
 class LoadConfigButton(CommandButton):
     def __init__(self, label="Load...", controller=None, parent=None):
-        super().__init__(label, controller=controller, parent=parent)
+        super().__init__(label, controller=controller, parent=parent,
+                         connections=dict(
+                            from_controller=(
+
+                            ),
+                            from_interface=(
+
+                            )
+                         ))
 
 class FocusButton(CommandButton):
     def __init__(self, label="FOCUS", controller=None, parent=None):
-        super().__init__(label, controller=controller, parent=parent)
+        super().__init__(label, controller=controller, parent=parent,
+                         connections=dict(
+                            from_controller=(
+                                ("openedDevice", "updateWithOpeningDevice"),
+                                ("closedDevice", "updateWithClosingDevice"),
+                            ),
+                            from_interface=(
+
+                            )
+                         ))
+
+    def updateWithOpeningDevice(self, device):
+        self.setEnabled(True)
+
+    def updateWithClosingDevice(self):
+        self.setEnabled(False)
 
 class GrabButton(CommandButton):
     def __init__(self, label="GRAB", controller=None, parent=None):
-        super().__init__(label, controller=controller, parent=parent)
+        super().__init__(label, controller=controller, parent=parent,
+                         connections=dict(
+                            from_controller=(
+                                ("openedDevice", "updateWithOpeningDevice"),
+                                ("closedDevice", "updateWithClosingDevice"),
+                            ),
+                            from_interface=(
+
+                            )
+                         ))
+
+    def updateWithOpeningDevice(self, device):
+        self.setEnabled(True)
+
+    def updateWithClosingDevice(self):
+        self.setEnabled(False)
