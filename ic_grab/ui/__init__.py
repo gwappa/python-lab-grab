@@ -33,7 +33,7 @@ try:
 
     class MainWindow(_QtWidgets.QMainWindow):
         DEFAULT_TITLE    = "IC-GRAB"
-        DEFAULT_GEOMETRY = (100, 100, 1000, 640) # X, Y, W, H
+        DEFAULT_GEOMETRY = (100, 100, 1000, 720) # X, Y, W, H
 
         def __init__(self, title=None, parent=None, show=True):
             super().__init__(parent=parent)
@@ -52,23 +52,30 @@ try:
             self._deviceselect = views.DeviceSelector(controller=self._control)
             self._frameformat  = views.FrameFormatSettings(controller=self._control)
             self._acquisition  = views.AcquisitionSettings(controller=self._control)
+            self._experiment   = views.ExperimentSettings(controller=self._control)
+            self._storage      = views.StorageSettings(controller=self._control,
+                                                       experiment=self._experiment)
             self._frame        = views.FrameView(controller=self._control)
 
             # add commands bar
             self._commands     = commands.CommandBar(controller=self._control)
 
             # add child components to the main widget
-            self._layout.addWidget(self._frame, 0, 0, 3, 1)
-            self._layout.addWidget(self._deviceselect, 0, 1)
-            self._layout.addWidget(self._frameformat, 1, 1)
-            self._layout.addWidget(self._acquisition, 2, 1)
-            self._layout.addWidget(self._commands, 3, 0, 1, 2)
+            self._layout.addWidget(self._frame, 0, 0, 5, 1)
+            self._layout.addWidget(self._experiment, 0, 1)
+            self._layout.addWidget(self._deviceselect, 1, 1)
+            self._layout.addWidget(self._frameformat, 2, 1)
+            self._layout.addWidget(self._acquisition, 3, 1)
+            self._layout.addWidget(self._storage, 4, 1)
+            self._layout.addWidget(self._commands, 5, 0, 1, 2)
             self._layout.setColumnStretch(0, 2)
             self._layout.setColumnStretch(1, 1)
-            self._layout.setRowStretch(0, 2)
-            self._layout.setRowStretch(1, 5)
+            self._layout.setRowStretch(0, 5)
+            self._layout.setRowStretch(1, 2)
             self._layout.setRowStretch(2, 5)
-            self._layout.setRowStretch(3, 1)
+            self._layout.setRowStretch(3, 4)
+            self._layout.setRowStretch(4, 5)
+            self._layout.setRowStretch(5, 1)
             self.statusBar() # create one
             if show == True:
                 self.show()

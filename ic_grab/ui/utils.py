@@ -41,7 +41,7 @@ class AcquisitionModes:
     FOCUS   = "FOCUS" # start FOCUS mode
     GRAB    = "GRAB"  # start GRAB mode
     IDLE    = "ABORT" # stop the current acquisition
-    
+
 class FrameFormat(_namedtuple("_FrameFormat", ("pixel", "width", "height"))):
     FORMAT_PATTERN = _re.compile(r"([a-zA-Z0-9-]+) \((\d+)x(\d+)\)")
 
@@ -142,6 +142,6 @@ class ViewGroup(_QtWidgets.QGroupBox, ControllerInterface):
                                      controller=controller,
                                      connections=connections)
 
-    def _addFormItem(self, item, row, col):
+    def _addFormItem(self, item, row, col, widget_colspan=1):
         self._layout.addWidget(item.label,  row,  col, alignment=_QtCore.Qt.AlignRight)
-        self._layout.addWidget(item.widget, row, col+1)
+        self._layout.addWidget(item.widget, row, col+1, 1, widget_colspan)

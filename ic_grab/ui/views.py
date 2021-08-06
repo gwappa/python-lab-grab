@@ -303,3 +303,75 @@ class AcquisitionSettings(_utils.ViewGroup):
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+
+class ExperimentSettings(_utils.ViewGroup):
+    def __init__(self, title="Experiment",
+                 controller=None,
+                 parent=None):
+        super().__init__(title, parent=parent,
+                         controller=controller,
+                         connections=dict(
+                            from_controller=(
+                                ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
+                            ),
+                            from_interface=(
+
+                            )
+                         ))
+        self._subject = _utils.FormItem("Subject", _QtWidgets.QLineEdit("nosubject"))
+        self._date    = _utils.FormItem("Date", _QtWidgets.QDateEdit(_QtCore.QDate.currentDate()))
+        self._index   = _utils.FormItem("Run index", _QtWidgets.QSpinBox())
+        self._autoinc = _QtWidgets.QCheckBox("Auto-increment")
+        self._domain  = _utils.FormItem("Domain", _QtWidgets.QLineEdit("Camera"))
+        self._addFormItem(self._subject,   0, 0, widget_colspan=2)
+        self._addFormItem(self._date,      1, 0, widget_colspan=2)
+        self._addFormItem(self._index,     2, 0, widget_colspan=1)
+        self._addFormItem(self._domain,    3, 0, widget_colspan=2)
+        self._layout.addWidget(self._autoinc, 2, 2)
+
+    def setEnabled(self, status):
+        for obj in (self._subject, self._date, self._index, self._autoinc, self._domain):
+            obj.setEnabled(status)
+
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+
+class StorageSettings(_utils.ViewGroup):
+    DEFAULT_NAME_PATTERN = "{subject}_{date}_{domain}_{index}"
+
+    def __init__(self, title="Storage",
+                 controller=None,
+                 experiment=None,
+                 parent=None):
+        super().__init__(title=title,
+                         controller=controller,
+                         parent=parent,
+                         connections=dict(
+                            from_controller=(
+                                ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
+                            ),
+                            from_interface=(
+
+                            )
+                         ))
+
+        # FIXME: add directory search option
+        # TODO: connect the widgets to Storage service
+        self._directory = _utils.FormItem("Directory", _QtWidgets.QLineEdit())
+        self._pattern = _utils.FormItem("File name pattern", _QtWidgets.QLineEdit(self.DEFAULT_NAME_PATTERN))
+        self._file    = _utils.FormItem("Next file name: ", _QtWidgets.QLabel("<unknown>"))
+        self._codec   = _utils.FormItem("Video format", _QtWidgets.QComboBox())
+        self._addFormItem(self._codec,     0, 0)
+        self._addFormItem(self._directory, 1, 0)
+        self._addFormItem(self._pattern,   2, 0)
+        self._addFormItem(self._file,      3, 0)
+
+        # TODO: connect with experiment settings widget
+
+    def setEnabled(self, state):
+        for obj in (self._directory, self._pattern, self._codec):
+            obj.setEnabled(state)
+
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        # TODO: start storing the frames
+        self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
