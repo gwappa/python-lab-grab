@@ -30,6 +30,11 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
 import tisgrabber as _tisgrabber
 from .. import LOGGER as _LOGGER
 
+class AcquisitionModes:
+    FOCUS   = "FOCUS" # start FOCUS mode
+    GRAB    = "GRAB"  # start GRAB mode
+    IDLE    = "ABORT" # stop the current acquisition
+
 class FrameRateSettings:
     def __init__(self, rate=_math.nan, available=True, parent=None):
         self._parent    = parent
@@ -137,12 +142,14 @@ class DeviceControl(_QtCore.QObject):
     updatedFormat           = _QtCore.pyqtSignal(str)
     updatedTriggerStatus    = _QtCore.pyqtSignal(bool)
     updatedFrameRate        = _QtCore.pyqtSignal(float)
+    updatedAcquisitionMode  = _QtCore.pyqtSignal(str, str)
     message                 = _QtCore.pyqtSignal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.message.connect(self._log)
         self._settings = DeviceSettings(parent=self)
+        self._mode     = AcquisitionModes.IDLE
 
     @property
     def settings(self):
@@ -205,6 +212,20 @@ class DeviceControl(_QtCore.QObject):
     def currentDevice(self):
         return self._settings.device
 
+    def setAcquisitionMode(self, mode):
+        if self._mode == mode:
+            return
+        oldmode = self._mode
+        self._mode = mode # TODO: update the device
+        self.updatedAcquisitionMode.emit(oldmode, mode)
+        if mode == AcquisitionModes.IDLE:
+            self.message.emit("info", f"finished {oldmode} (not implemented)")
+        else:
+            self.message.emit("info", f"started {mode} (not implemented)")
+
+    def getAcquisitionMode(self):
+        return self._mode
+
     ## TODO: move load/save-Settings() to a higher level (e.g. MainWindow)?
     def saveSettings(self, path):
         raise NotImplementedError() # FIXME
@@ -225,3 +246,4 @@ class DeviceControl(_QtCore.QObject):
     triggered     = property(fget=isTriggered, fset=setTriggered)
     has_trigger   = property(fget=isTriggerAvailable)
     frame_rate    = property(fget=getFrameRate, fset=setFrameRate)
+    mode          = property(fget=getAcquisitionMode, fset=setAcquisitionMode)

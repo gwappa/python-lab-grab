@@ -27,6 +27,7 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
 import tisgrabber as _tisgrabber
 
 from . import utils as _utils
+from . import device as _device
 from .. import LOGGER as _LOGGER
 
 class CommandBar(_QtWidgets.QWidget):
@@ -77,18 +78,27 @@ class LoadConfigButton(CommandButton):
                             )
                          ))
 
-class FocusButton(CommandButton):
-    def __init__(self, label="FOCUS", controller=None, parent=None):
+class AcquireButton(CommandButton):
+    LABEL_IDLE    = _device.AcquisitionModes.IDLE
+    LABEL_RUNNING = _device.AcquisitionModes.IDLE
+
+    requestedAcquisitionMode = _QtCore.pyqtSignal(str)
+
+    def __init__(self, label=None, controller=None, parent=None):
+        if label is None:
+            label = self.LABEL_IDLE
         super().__init__(label, controller=controller, parent=parent,
                          connections=dict(
                             from_controller=(
                                 ("openedDevice", "updateWithOpeningDevice"),
                                 ("closedDevice", "updateWithClosingDevice"),
+                                ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
                             ),
                             from_interface=(
-
+                                ("requestedAcquisitionMode", "setAcquisitionMode"),
                             )
                          ))
+        self.clicked.connect(self.dispatchRequest)
 
     def updateWithOpeningDevice(self, device):
         self.setEnabled(True)
@@ -96,21 +106,46 @@ class FocusButton(CommandButton):
     def updateWithClosingDevice(self):
         self.setEnabled(False)
 
-class GrabButton(CommandButton):
-    def __init__(self, label="GRAB", controller=None, parent=None):
-        super().__init__(label, controller=controller, parent=parent,
-                         connections=dict(
-                            from_controller=(
-                                ("openedDevice", "updateWithOpeningDevice"),
-                                ("closedDevice", "updateWithClosingDevice"),
-                            ),
-                            from_interface=(
+    def dispatchRequest(self):
+        self.requestedAcquisitionMode.emit(self.text())
 
-                            )
-                         ))
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        if oldmode == self.LABEL_IDLE:
+            # has been in the acquisition started by the command for this button
+            self.finishedAcquisition()
+            if newmode == _device.AcquisitionModes.IDLE:
+                self.setText(self.LABEL_IDLE)
+            else:
+                raise RuntimeError(f"unexpected mode transition from {oldmode} to {newmode}")
+        elif newmode == self.LABEL_IDLE:
+            # started the acquisition handled by this button
+            self.startedAcquisition()
+            self.setText(self.LABEL_RUNNING)
+        elif oldmode == _device.AcquisitionModes.IDLE:
+            # started the other acquisition mode
+            self.setEnabled(False)
+        elif newmode == _device.AcquisitionModes.IDLE:
+            # finished the other acquisition mode
+            self.setEnabled(True)
+        else:
+            raise RuntimeError(f"unexpected mode transition from {oldmode} to {newmode}")
 
-    def updateWithOpeningDevice(self, device):
-        self.setEnabled(True)
+    def startedAcquisition(self):
+        """a callback which could be implemented by the subclass."""
+        pass
 
-    def updateWithClosingDevice(self):
-        self.setEnabled(False)
+    def finishedAcquisition(self):
+        """a callback which could be implemented by the subclass."""
+        pass
+
+class FocusButton(AcquireButton):
+    LABEL_IDLE = _device.AcquisitionModes.FOCUS
+
+    def __init__(self, label=None, controller=None, parent=None):
+        super().__init__(label=label, controller=controller, parent=parent)
+
+class GrabButton(AcquireButton):
+    LABEL_IDLE = _device.AcquisitionModes.GRAB
+
+    def __init__(self, label=None, controller=None, parent=None):
+        super().__init__(label=label, controller=controller, parent=parent)
