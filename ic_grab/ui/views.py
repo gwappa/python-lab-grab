@@ -53,12 +53,16 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
                                             connections=dict(
                                                 from_controller=(
                                                     ("updatedFormat", "updateWithFormat"),
+                                                    ("acquisitionReady", "prepareForAcquisition"),
+                                                    ("frameReady", "updateWithFrame"),
                                                 ),
                                                 from_interface=(
 
                                                 )
                                             ))
+
     def updateWithFormat(self, format_name):
+        ## TODO: merge with prepareForAcquisition()
         if len(format_name) == 0:
             return
         fmt  = _utils.FrameFormat.from_name(format_name)
@@ -66,6 +70,14 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
         self._scene.setSceneRect(_QtCore.QRectF(0, 0, *dims))
         self._image.setImage(_np.zeros(dims, dtype=_np.uint8))
         # TODO: set transform to fit the image to the rect
+
+    def prepareForAcquisition(self, desc, store_frames=None):
+        dims = desc.shape
+        self._scene.setSceneRect(_QtCore.QRectF(0, 0, *dims[:2:-1]))
+        self._image.setImage(_np.zeros(dims, dtype=desc.dtype))
+
+    def updateWithFrame(self, frame_index, frame):
+        self._image.setImage(frame)
 
 class DeviceSelector(_utils.ViewGroup):
     LABEL_OPEN  = "Open"

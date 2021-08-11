@@ -139,6 +139,9 @@ class DeviceControl(_QtCore.QObject):
     updatedTriggerStatus    = _QtCore.pyqtSignal(bool)
     updatedFrameRate        = _QtCore.pyqtSignal(float)
     updatedAcquisitionMode  = _QtCore.pyqtSignal(str, str)
+    acquisitionReady        = _QtCore.pyqtSignal(object, bool) # (image_descriptor, store_frames)
+    acquisitionEnded        = _QtCore.pyqtSignal()
+    frameReady              = _QtCore.pyqtSignal(int, object)
     message                 = _QtCore.pyqtSignal(str, str)
 
     def __init__(self, parent=None):
@@ -196,6 +199,7 @@ class DeviceControl(_QtCore.QObject):
         if self._settings.device is not None:
             self.closeDevice()
         self._settings.device = _tisgrabber.Camera(device_name)
+        self._settings.device.callbacks.append(self._frameReady)
         self.openedDevice.emit(self._settings.device)
         self.message.emit("info", f"opened device: {device_name}")
 
@@ -212,15 +216,39 @@ class DeviceControl(_QtCore.QObject):
         if self._mode == mode:
             return
         oldmode = self._mode
-        self._mode = mode # TODO: update the device
-        self.updatedAcquisitionMode.emit(oldmode, mode)
-        if mode == _utils.AcquisitionModes.IDLE:
-            self.message.emit("info", f"finished {oldmode} (not implemented)")
-        else:
-            self.message.emit("info", f"started {mode} (not implemented)")
+        try:
+            self._startAcquisitionMode(mode)
+            self._mode = mode # TODO: update the device
+            self.updatedAcquisitionMode.emit(oldmode, mode)
+            if mode == _utils.AcquisitionModes.IDLE:
+                self.message.emit("info", f"finished {oldmode}")
+            else:
+                self.message.emit("info", f"started {mode}")
+        except:
+            # FIXME
+            raise
 
     def getAcquisitionMode(self):
         return self._mode
+
+    def _startAcquisitionMode(self, mode):
+        device = self._settings.device
+        if mode == _utils.AcquisitionModes.IDLE:
+            if device.is_setup():
+                device.stop()
+                self.acquisitionEnded.emit()
+        elif mode in (_utils.AcquisitionModes.FOCUS, _utils.AcquisitionModes.GRAB):
+            if not device.is_setup():
+                device.prepare(preview=False)
+            self.acquisitionReady.emit(device.image_descriptor,
+                                       mode == _utils.AcquisitionModes.GRAB)
+            device.start(preview=False, update_descriptor=False)
+        else:
+            raise ValueError(f"unexpected mode: {mode}")
+
+    def _frameReady(self, device, frame_index, frame):
+        self.frameReady.emit(frame_index, _utils.image_to_display(frame))
+        #_LOGGER.info(f"frame #{frame_index}: {frame.shape}@{str(frame.dtype)}")
 
     ## TODO: move load/save-Settings() to a higher level (e.g. MainWindow)?
     def saveSettings(self, path):

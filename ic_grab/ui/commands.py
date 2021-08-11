@@ -78,14 +78,14 @@ class LoadConfigButton(CommandButton):
                          ))
 
 class AcquireButton(CommandButton):
-    LABEL_IDLE    = _utils.AcquisitionModes.IDLE
-    LABEL_RUNNING = _utils.AcquisitionModes.IDLE
+    LABEL_START = _utils.AcquisitionModes.IDLE
+    LABEL_STOP  = _utils.AcquisitionModes.IDLE
 
     requestedAcquisitionMode = _QtCore.pyqtSignal(str)
 
     def __init__(self, label=None, controller=None, parent=None):
         if label is None:
-            label = self.LABEL_IDLE
+            label = self.LABEL_START
         super().__init__(label, controller=controller, parent=parent,
                          connections=dict(
                             from_controller=(
@@ -109,17 +109,17 @@ class AcquireButton(CommandButton):
         self.requestedAcquisitionMode.emit(self.text())
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
-        if oldmode == self.LABEL_IDLE:
+        if oldmode == self.LABEL_START:
             # has been in the acquisition started by the command for this button
             self.finishedAcquisition()
             if newmode == _utils.AcquisitionModes.IDLE:
-                self.setText(self.LABEL_IDLE)
+                self.setText(self.LABEL_START)
             else:
                 raise RuntimeError(f"unexpected mode transition from {oldmode} to {newmode}")
-        elif newmode == self.LABEL_IDLE:
+        elif newmode == self.LABEL_START:
             # started the acquisition handled by this button
             self.startedAcquisition()
-            self.setText(self.LABEL_RUNNING)
+            self.setText(self.LABEL_STOP)
         elif oldmode == _utils.AcquisitionModes.IDLE:
             # started the other acquisition mode
             self.setEnabled(False)
@@ -138,13 +138,13 @@ class AcquireButton(CommandButton):
         pass
 
 class FocusButton(AcquireButton):
-    LABEL_IDLE = _utils.AcquisitionModes.FOCUS
+    LABEL_START = _utils.AcquisitionModes.FOCUS
 
     def __init__(self, label=None, controller=None, parent=None):
         super().__init__(label=label, controller=controller, parent=parent)
 
 class GrabButton(AcquireButton):
-    LABEL_IDLE = _utils.AcquisitionModes.GRAB
+    LABEL_START = _utils.AcquisitionModes.GRAB
 
     def __init__(self, label=None, controller=None, parent=None):
         super().__init__(label=label, controller=controller, parent=parent)

@@ -29,6 +29,12 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
 
 from .. import LOGGER as _LOGGER
 
+def image_to_display(img):
+    if img.ndim == 3:
+        return img.transpose((1,0,2))[:,::-1]
+    else:
+        return img.T[:,::-1]
+
 def check_status_notristate(status):
     if status == _QtCore.Qt.Unchecked:
         return False
