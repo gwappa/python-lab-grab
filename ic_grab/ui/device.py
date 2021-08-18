@@ -118,6 +118,37 @@ class DeviceSettings:
             self._rate.value = value
 
     @property
+    def exposure(self):
+        return self._exposure
+
+    @exposure.setter
+    def exposure(self, setting):
+        value, auto = setting
+        if self.device is not None:
+            self.device.exposure_us   = value
+            self.device.auto_exposure = auto
+            value = self.device.exposure_us
+            auto  = self.device.auto_exposure
+        if self._parent is not None:
+            self._parent.updatedExposureUs.emit(value, auto)
+
+    @property
+    def exposure_us(self):
+        return self.device.exposure_us
+
+    @exposure_us.setter
+    def exposure_us(self, val):
+        self.exposure = (val, self.device.auto_exposure)
+
+    @property
+    def auto_exposure(self):
+        return self.device.auto_exposure
+
+    @auto_exposure.setter
+    def auto_exposure(self, val):
+        self.exposure = (self.device.exposure_us, val)
+
+    @property
     def strobe_mode(self):
         return self._strobe_mode
 
@@ -153,6 +184,7 @@ class DeviceControl(_QtCore.QObject):
     updatedFormat           = _QtCore.pyqtSignal(str)
     updatedTriggerStatus    = _QtCore.pyqtSignal(bool)
     updatedFrameRate        = _QtCore.pyqtSignal(float)
+    updatedExposureUs       = _QtCore.pyqtSignal(int, bool) # (exposure_us, auto_exposure)
     updatedStrobeMode       = _QtCore.pyqtSignal(str)
     updatedAcquisitionMode  = _QtCore.pyqtSignal(str, str)
     acquisitionReady        = _QtCore.pyqtSignal(object, bool) # (image_descriptor, store_frames)
@@ -205,6 +237,21 @@ class DeviceControl(_QtCore.QObject):
     def setStrobeMode(self, mode):
         self._settings.strobe_mode = mode
         self.message.emit("info", f"current strobe mode: {self._settings.strobe_mode}")
+
+    def updateExposureSettings(self, value, auto):
+        self._settings.exposure = (value, auto)
+
+    def getExposureUs(self):
+        return self._settings.exposure_us
+
+    def setExposureUs(self, value):
+        self._settings.exposure_us = value
+
+    def getAutoExposure(self):
+        return self._settings.auto_exposure
+
+    def setAutoExposure(self, auto):
+        self._settings.auto_exposure = auto
 
     def _log(self, level, message):
         if level == "info":
@@ -303,3 +350,6 @@ class DeviceControl(_QtCore.QObject):
     has_trigger   = property(fget=isTriggerAvailable)
     frame_rate    = property(fget=getFrameRate, fset=setFrameRate)
     mode          = property(fget=getAcquisitionMode, fset=setAcquisitionMode)
+    strobe_mode   = property(fget=getStrobeMode, fset=setStrobeMode)
+    exposure_us   = property(fget=getExposureUs, fset=setExposureUs)
+    auto_exposure = property(fget=getAutoExposure, fset=setAutoExposure)
