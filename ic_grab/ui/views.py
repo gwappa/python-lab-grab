@@ -240,6 +240,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._rate.widget.valueChanged.connect(self.invalidateFrameRate)
         self._rate.widget.editingFinished.connect(self.dispatchFrameRateUpdate)
 
+        self._strobe   = _utils.FormItem("Strobe output", StrobeModeSelector(controller=self._controller))
+
         self._exposure = _utils.FormItem("Exposure (us)", _QtWidgets.QSpinBox())
         # set up the spin box
         # TODO: configure upon opening a device
@@ -261,11 +263,12 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._layout.addWidget(self._autoexp, 1, 2)
         self._addFormItem(self._gain, 2, 0)
         self._layout.addWidget(self._autogain, 2, 2)
+        self._addFormItem(self._strobe, 3, 0)
 
         self.setEnabled(False)
 
     def setEnabled(self, val):
-        for obj in (self._rate, self._triggered):
+        for obj in (self._rate, self._triggered, self._strobe):
             obj.setEnabled(val)
         for obj in (self._exposure, self._autoexp):
             obj.setEnabled(False)
@@ -315,6 +318,35 @@ class AcquisitionSettings(_utils.ViewGroup):
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+
+class StrobeModeSelector(_QtWidgets.QComboBox, _utils.ControllerInterface):
+    requestStrobeModeUpdate = _QtCore.pyqtSignal(str)
+
+    def __init__(self, controller=None, parent=None):
+        _QtWidgets.QComboBox.__init__(self, parent=parent)
+        for mode in _utils.StrobeModes.iterate():
+            self.addItem(mode)
+        self.currentTextChanged.connect(self.dispatchStrobeModeUpdate)
+        _utils.ControllerInterface.__init__(self, controller=controller,
+                                            connections=dict(
+                                                from_controller=(
+                                                    ("updatedStrobeMode", "updateWithStrobeMode"),
+                                                ),
+                                                from_interface=(
+                                                    ("requestStrobeModeUpdate", "setStrobeMode"),
+                                                )
+                                            ))
+
+    def dispatchStrobeModeUpdate(self, mode):
+        if self._updating == True:
+            # updating from the controller
+            return
+        self.requestStrobeModeUpdate.emit(mode)
+
+    def updateWithStrobeMode(self, mode):
+        self._updating = True
+        self.setCurrentText(mode)
+        self._updating = False
 
 class ExperimentSettings(_utils.ViewGroup):
     requestSubjectUpdate = _QtCore.pyqtSignal(str)

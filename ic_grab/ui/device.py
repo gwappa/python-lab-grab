@@ -63,7 +63,8 @@ class DeviceSettings:
         self._parent = parent
         self.device  = None
         self._format = None
-        self._rate   = FrameRateSettings(available=False, parent=parent)
+        self._strobe_mode = _utils.StrobeModes.DISABLED
+        self._rate        = FrameRateSettings(available=False, parent=parent)
 
     def as_dict(self):
         raise NotImplementedError() # FIXME
@@ -80,6 +81,7 @@ class DeviceSettings:
         ## FIXME: warn in case no device is open
         if self.device is not None:
             if format_name in self.device.list_video_formats():
+                ## FIXME: warn in case the format is not understood
                 self.device.video_format = format_name
             if self._parent is not None:
                 self._parent.updatedFormat.emit(self._format)
@@ -115,6 +117,19 @@ class DeviceSettings:
         else:
             self._rate.value = value
 
+    @property
+    def strobe_mode(self):
+        return self._strobe_mode
+
+    @strobe_mode.setter
+    def strobe_mode(self, val):
+        val = str(val)
+        if val not in _utils.StrobeModes.iterate():
+            raise ValueError("unexpected strobe mode: "+val)
+        self._strobe_mode = val
+        if self._parent is not None:
+            self._parent.updatedStrobeMode.emit(self._strobe_mode)
+
     def update(self):
         self._rate.available = (self.device is not None)
         if self.device is None:
@@ -138,6 +153,7 @@ class DeviceControl(_QtCore.QObject):
     updatedFormat           = _QtCore.pyqtSignal(str)
     updatedTriggerStatus    = _QtCore.pyqtSignal(bool)
     updatedFrameRate        = _QtCore.pyqtSignal(float)
+    updatedStrobeMode       = _QtCore.pyqtSignal(str)
     updatedAcquisitionMode  = _QtCore.pyqtSignal(str, str)
     acquisitionReady        = _QtCore.pyqtSignal(object, bool) # (image_descriptor, store_frames)
     acquisitionEnded        = _QtCore.pyqtSignal()
@@ -182,6 +198,13 @@ class DeviceControl(_QtCore.QObject):
     def setFrameRate(self, val):
         self._settings.frame_rate = val
         self.message.emit("info", f"current frame rate: {self._settings.frame_rate:.1f} Hz")
+
+    def getStrobeMode(self):
+        return self._settings.strobe_mode
+
+    def setStrobeMode(self, mode):
+        self._settings.strobe_mode = mode
+        self.message.emit("info", f"current strobe mode: {self._settings.strobe_mode}")
 
     def _log(self, level, message):
         if level == "info":
@@ -236,10 +259,19 @@ class DeviceControl(_QtCore.QObject):
         if mode == _utils.AcquisitionModes.IDLE:
             if device.is_setup():
                 device.stop()
+                device.strobe = self.__prev_strobe_mode
                 self.acquisitionEnded.emit()
         elif mode in (_utils.AcquisitionModes.FOCUS, _utils.AcquisitionModes.GRAB):
+            # prepare strobe settings
+            self.__prev_strobe_mode = device.strobe
+            device.strobe = _utils.StrobeModes.requires_strobe(self._settings.strobe_mode,
+                                                               mode)
+
+            # prepare the device
             if not device.is_setup():
                 device.prepare(preview=False)
+
+            # let the other modules prepare for acquisition
             self.acquisitionReady.emit(device.image_descriptor,
                                        mode == _utils.AcquisitionModes.GRAB)
             device.start(preview=False, update_descriptor=False)

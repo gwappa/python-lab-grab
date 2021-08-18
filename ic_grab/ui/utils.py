@@ -43,6 +43,26 @@ def check_status_notristate(status):
     else:
         raise ValueError(f"tristate check box is not supported")
 
+class StrobeModes:
+    DISABLED       = "Disabled"
+    GRAB_ONLY      = "Grab only"
+    FOCUS_AND_GRAB = "Focus and Grab"
+
+    @staticmethod
+    def iterate():
+        return (StrobeModes.DISABLED,
+                StrobeModes.GRAB_ONLY,
+                StrobeModes.FOCUS_AND_GRAB)
+
+    @staticmethod
+    def requires_strobe(strobemode, acqmode):
+        if acqmode == AcquisitionModes.FOCUS:
+            return strobemode == StrobeModes.FOCUS_AND_GRAB
+        elif acqmode == AcquisitionModes.GRAB:
+            return strobemode in (StrobeModes.FOCUS_AND_GRAB, StrobeModes.GRAB_ONLY)
+        else:
+            return False
+
 class AcquisitionModes:
     FOCUS   = "FOCUS" # start FOCUS mode
     GRAB    = "GRAB"  # start GRAB mode

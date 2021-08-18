@@ -77,7 +77,7 @@ try:
             self._layout.setRowStretch(0, 4)
             self._layout.setRowStretch(1, 2)
             self._layout.setRowStretch(2, 5)
-            self._layout.setRowStretch(3, 4)
+            self._layout.setRowStretch(3, 5)
             self._layout.setRowStretch(4, 5)
             self._layout.setRowStretch(5, 1)
             self.statusBar() # create one
