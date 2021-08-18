@@ -32,12 +32,6 @@ import tisgrabber as _tisgrabber
 from . import utils as _utils
 from .. import LOGGER as _LOGGER
 
-def setDirty(widget):
-    widget.setStyleSheet("color: red")
-
-def clearDirty(widget):
-    widget.setStyleSheet("")
-
 class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
     INITIAL_DIMS   = (640, 480)
     DEFAULT_COLOR  = (255, 255, 255, 255)
@@ -229,7 +223,7 @@ class AcquisitionSettings(_utils.ViewGroup):
                                 ("requestedFrameRateUpdate", "setFrameRate"),
                             )
                          ))
-        self._rate = _utils.FormItem("Frame rate (Hz)", _QtWidgets.QDoubleSpinBox())
+        self._rate = _utils.FormItem("Frame rate (Hz)", _utils.InvalidatableDoubleSpinBox())
         # set up the spin box
         # TODO: configure upon opening a device?
         self._rate.widget.setDecimals(1)
@@ -237,8 +231,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._rate.widget.setMinimum(1.0)
         self._rate.widget.setSingleStep(0.1)
         self._rate.widget.setValue(30)
-        self._rate.widget.valueChanged.connect(self.invalidateFrameRate)
-        self._rate.widget.editingFinished.connect(self.dispatchFrameRateUpdate)
+        self._rate.widget.edited.connect(self._rate.widget.invalidate)
+        self._rate.widget.valueChanged.connect(self.dispatchFrameRateUpdate)
 
         self._strobe   = _utils.FormItem("Strobe output", StrobeModeSelector(controller=self._controller))
 
@@ -278,7 +272,7 @@ class AcquisitionSettings(_utils.ViewGroup):
     def invalidateFrameRate(self, _):
         if self._updating == True:
             return
-        setDirty(self._rate.widget)
+        _utils.set_dirty(self._rate.widget)
 
     def dispatchTriggerStatusUpdate(self, status):
         if self._updating == True:
@@ -286,7 +280,7 @@ class AcquisitionSettings(_utils.ViewGroup):
         self.requestedTriggerStatusUpdate.emit(_utils.check_status_notristate(status))
 
     def dispatchFrameRateUpdate(self):
-        if self._updating == True:
+        if (self._updating == True) or (self._rate.widget.editing == True):
             return
         self.requestedFrameRateUpdate.emit(self._rate.widget.value())
 
@@ -313,7 +307,7 @@ class AcquisitionSettings(_utils.ViewGroup):
     def updateWithFrameRate(self, val):
         self._updating = True
         self._rate.widget.setValue(val)
-        clearDirty(self._rate.widget)
+        self._rate.widget.revalidate()
         self._updating = False
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
@@ -453,11 +447,11 @@ class ExperimentSettings(_utils.ViewGroup):
 
     def subjectEditCallback(self, _):
         if not self._updating:
-            setDirty(self._subject.widget)
+            _utils.set_dirty(self._subject.widget)
 
     def domainEditCallback(self, _):
         if not self._updating:
-            setDirty(self._domain.widget)
+            _utils.set_dirty(self._domain.widget)
 
     def dispatchSubjectUpdate(self):
         if not self._updating:
@@ -473,13 +467,13 @@ class ExperimentSettings(_utils.ViewGroup):
 
     def updateWithSubject(self, value):
         self._updating = True
-        clearDirty(self._subject.widget)
+        _utils.clear_dirty(self._subject.widget)
         self._subject.widget.setText(value)
         self._updating = False
 
     def updateWithDomain(self, value):
         self._updating = True
-        clearDirty(self._domain.widget)
+        _utils.clear_dirty(self._domain.widget)
         self._domain.widget.setText(value)
         self._updating = False
 
