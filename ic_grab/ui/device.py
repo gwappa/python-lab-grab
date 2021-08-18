@@ -119,18 +119,24 @@ class DeviceSettings:
 
     @property
     def exposure(self):
-        return self._exposure
+        return (self.device.exposure_us, self.device.auto_exposure)
 
     @exposure.setter
     def exposure(self, setting):
         value, auto = setting
         if self.device is not None:
+            value = int(round(value))
+            m, M = self.device.exposure_range_us
+            if m > value:
+                value = m # FIXME: warn in some fashion
+            elif M < value:
+                value = M # FIXME: warn in some fashion
             self.device.exposure_us   = value
             self.device.auto_exposure = auto
             value = self.device.exposure_us
             auto  = self.device.auto_exposure
         if self._parent is not None:
-            self._parent.updatedExposureUs.emit(value, auto)
+            self._parent.updatedExposureSettings.emit(value, auto)
 
     @property
     def exposure_us(self):
@@ -184,7 +190,7 @@ class DeviceControl(_QtCore.QObject):
     updatedFormat           = _QtCore.pyqtSignal(str)
     updatedTriggerStatus    = _QtCore.pyqtSignal(bool)
     updatedFrameRate        = _QtCore.pyqtSignal(float)
-    updatedExposureUs       = _QtCore.pyqtSignal(int, bool) # (exposure_us, auto_exposure)
+    updatedExposureSettings = _QtCore.pyqtSignal(int, bool) # (exposure_us, auto_exposure)
     updatedStrobeMode       = _QtCore.pyqtSignal(str)
     updatedAcquisitionMode  = _QtCore.pyqtSignal(str, str)
     acquisitionReady        = _QtCore.pyqtSignal(object, bool) # (image_descriptor, store_frames)
@@ -240,6 +246,11 @@ class DeviceControl(_QtCore.QObject):
 
     def updateExposureSettings(self, value, auto):
         self._settings.exposure = (value, auto)
+        value, auto = self._settings.exposure
+        if auto == True:
+            self.message.emit("info", "enabled auto-exposure")
+        else:
+            self.message.emit("info", f"current exposure: {value} us")
 
     def getExposureUs(self):
         return self._settings.exposure_us

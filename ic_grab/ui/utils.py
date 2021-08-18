@@ -178,6 +178,45 @@ class ViewGroup(_QtWidgets.QGroupBox, ControllerInterface):
         self._layout.addWidget(item.label,  row,  col, alignment=_QtCore.Qt.AlignRight)
         self._layout.addWidget(item.widget, row, col+1, 1, widget_colspan)
 
+class InvalidatableSpinBox(_QtWidgets.QSpinBox):
+    """invalidatable version of QSpinBox."""
+    edited = _QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+        self.editingFinished.connect(self.dispatchValueChange)
+        self._editing  = False
+        self._pressing = False
+
+    @property
+    def editing(self):
+        return self._editing
+
+    # override
+    def stepBy(self, steps):
+        self._pressing = True
+        self._editing  = False
+        super().stepBy(steps)
+        self._pressing = False
+
+    # override
+    def valueFromText(self, text):
+        if self._pressing == False:
+            self._editing = True
+            self.edited.emit()
+        return super().valueFromText(text)
+
+    def dispatchValueChange(self):
+        self._editing = False
+        self.valueChanged.emit(self.value())
+
+    def invalidate(self):
+        set_dirty(self)
+
+    def revalidate(self):
+        self._editing = False
+        clear_dirty(self)
+
 class InvalidatableDoubleSpinBox(_QtWidgets.QDoubleSpinBox):
     """invalidatable version of QDoubleSpinBox."""
     edited = _QtCore.pyqtSignal()
@@ -196,7 +235,7 @@ class InvalidatableDoubleSpinBox(_QtWidgets.QDoubleSpinBox):
     def stepBy(self, steps):
         self._pressing = True
         self._editing  = False
-        _QtWidgets.QDoubleSpinBox.stepBy(self, steps)
+        super().stepBy(steps)
         self._pressing = False
 
     # override
@@ -204,7 +243,7 @@ class InvalidatableDoubleSpinBox(_QtWidgets.QDoubleSpinBox):
         if self._pressing == False:
             self._editing = True
             self.edited.emit()
-        return _QtWidgets.QDoubleSpinBox.valueFromText(self, text)
+        return super().valueFromText(text)
 
     def dispatchValueChange(self):
         self._editing = False

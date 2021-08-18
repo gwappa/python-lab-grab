@@ -201,8 +201,9 @@ class FrameFormatSettings(_utils.ViewGroup):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
 
 class AcquisitionSettings(_utils.ViewGroup):
-    requestedTriggerStatusUpdate = _QtCore.pyqtSignal(bool)
-    requestedFrameRateUpdate     = _QtCore.pyqtSignal(float)
+    requestedTriggerStatusUpdate    = _QtCore.pyqtSignal(bool)
+    requestedFrameRateUpdate        = _QtCore.pyqtSignal(float)
+    requestedExposureSettingsUpdate = _QtCore.pyqtSignal(int, bool)
 
     def __init__(self, title="Acquisition",
                  controller=None,
@@ -216,11 +217,13 @@ class AcquisitionSettings(_utils.ViewGroup):
                                 ("closedDevice", "updateWithClosingDevice"),
                                 ("updatedTriggerStatus", "updateWithTriggerStatus"),
                                 ("updatedFrameRate", "updateWithFrameRate"),
+                                ("updatedExposureSettings", "updateWithExposureSettings"),
                                 ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
                             ),
                             from_interface=(
                                 ("requestedTriggerStatusUpdate", "setTriggered"),
                                 ("requestedFrameRateUpdate", "setFrameRate"),
+                                ("requestedExposureSettingsUpdate", "updateExposureSettings")
                             )
                          ))
         self._rate = _utils.FormItem("Frame rate (Hz)", _utils.InvalidatableDoubleSpinBox())
@@ -236,19 +239,22 @@ class AcquisitionSettings(_utils.ViewGroup):
 
         self._strobe   = _utils.FormItem("Strobe output", StrobeModeSelector(controller=self._controller))
 
-        self._exposure = _utils.FormItem("Exposure (us)", _QtWidgets.QSpinBox())
+        self._exposure = _utils.FormItem("Exposure (us)", _utils.InvalidatableSpinBox())
         # set up the spin box
         # TODO: configure upon opening a device
         self._exposure.widget.setMinimum(1)
         self._exposure.widget.setMaximum(100000)
         self._exposure.widget.setValue(10000)
+        self._exposure.widget.edited.connect(self._exposure.widget.invalidate)
+        self._exposure.widget.valueChanged.connect(self.dispatchExposureSettingsUpdate)
 
-        self._gain = _utils.FormItem("Gain", _QtWidgets.QSpinBox())
+        self._gain = _utils.FormItem("Gain", _utils.InvalidatableSpinBox())
         # TODO: deal with gain settings
 
         self._triggered = _QtWidgets.QCheckBox("Use external trigger")
         self._triggered.stateChanged.connect(self.dispatchTriggerStatusUpdate)
         self._autoexp   = _QtWidgets.QCheckBox("Auto-exposure")
+        self._autoexp.stateChanged.connect(self.dispatchExposureSettingsUpdate)
         self._autogain  = _QtWidgets.QCheckBox("Auto-gain")
         self._addFormItem(self._rate, 0, 0)
         self._layout.addWidget(self._triggered, 0, 2,
@@ -265,24 +271,25 @@ class AcquisitionSettings(_utils.ViewGroup):
         for obj in (self._rate, self._triggered, self._strobe):
             obj.setEnabled(val)
         for obj in (self._exposure, self._autoexp):
-            obj.setEnabled(False)
+            obj.setEnabled(val)
         for obj in (self._gain, self._autogain):
             obj.setEnabled(False)
 
-    def invalidateFrameRate(self, _):
+    def dispatchTriggerStatusUpdate(self, _=None): # the argument will never be used
         if self._updating == True:
             return
-        _utils.set_dirty(self._rate.widget)
-
-    def dispatchTriggerStatusUpdate(self, status):
-        if self._updating == True:
-            return
-        self.requestedTriggerStatusUpdate.emit(_utils.check_status_notristate(status))
+        self.requestedTriggerStatusUpdate.emit(self._triggered.isChecked())
 
     def dispatchFrameRateUpdate(self):
         if (self._updating == True) or (self._rate.widget.editing == True):
             return
         self.requestedFrameRateUpdate.emit(self._rate.widget.value())
+
+    def dispatchExposureSettingsUpdate(self, _=None): # the argument will never be used
+        if (self._updating == True) or (self._exposure.widget.editing == True):
+            return
+        self.requestedExposureSettingsUpdate.emit(self._exposure.widget.value(),
+                                                  self._autoexp.isChecked())
 
     def updateWithOpeningDevice(self, device):
         self.setEnabled(True)
@@ -294,6 +301,10 @@ class AcquisitionSettings(_utils.ViewGroup):
         else:
             self._triggered.setEnabled(False)
             self._triggered.setChecked(False)
+        self._exposure.widget.setValue(device.exposure_us)
+        self._autoexp.setChecked(device.auto_exposure)
+        if device.auto_exposure:
+            self._exposure.widget.setEnabled(False)
         self._updating = False
 
     def updateWithClosingDevice(self):
@@ -308,6 +319,14 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._updating = True
         self._rate.widget.setValue(val)
         self._rate.widget.revalidate()
+        self._updating = False
+
+    def updateWithExposureSettings(self, val, auto):
+        self._updating = True
+        self._exposure.widget.setValue(val)
+        self._exposure.widget.revalidate()
+        self._autoexp.setChecked(auto)
+        self._exposure.widget.setEnabled(not auto)
         self._updating = False
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
