@@ -522,7 +522,7 @@ class ExperimentSettings(_utils.ViewGroup):
             self._experiment.qDate_format
 
     def setEnabled(self, status):
-        for obj in (self._subject, self._date, self._domain):
+        for obj in (self._subject, self._date, self._index, self._domain, self._append):
             obj.setEnabled(status)
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
