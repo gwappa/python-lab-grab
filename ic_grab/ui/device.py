@@ -132,7 +132,7 @@ class DeviceSettings:
             elif M < value:
                 value = M # FIXME: warn in some fashion
             self.device.exposure_us   = value
-            self.device.auto_exposure = auto
+            self.device.auto_exposure = bool(auto)
             value = self.device.exposure_us
             auto  = self.device.auto_exposure
         if self._parent is not None:
@@ -153,6 +153,43 @@ class DeviceSettings:
     @auto_exposure.setter
     def auto_exposure(self, val):
         self.exposure = (self.device.exposure_us, val)
+
+    @property
+    def gain(self):
+        return (self.device.gain, self.device.auto_gain)
+
+    @gain.setter
+    def gain(self, setting):
+        value, auto = setting
+        if self.device is not None:
+            value = float(value)
+            m, M  = self.device.gain_range
+            if m > value:
+                value = m # FIXME warn in some fashion
+            elif M < value:
+                value = M # FIXME warn in some fashion
+            self.device.gain = value
+            self.device.auto_gain = bool(auto)
+            value = self.device.gain
+            auto  = self.device.auto_gain
+        if self._parent is not None:
+            self._parent.updatedGainSettings.emit(value, auto)
+
+    @property
+    def manual_gain(self):
+        return self.device.gain
+
+    @manual_gain.setter
+    def manual_gain(self, val):
+        self.gain = (val, self.device.auto_gain)
+
+    @property
+    def auto_gain(self):
+        return self.device.auto_gain
+
+    @auto_gain.setter
+    def auto_gain(self, val):
+        self.gain = (self.device.gain, val)
 
     @property
     def strobe_mode(self):
@@ -191,6 +228,7 @@ class DeviceControl(_QtCore.QObject):
     updatedTriggerStatus    = _QtCore.pyqtSignal(bool)
     updatedFrameRate        = _QtCore.pyqtSignal(float)
     updatedExposureSettings = _QtCore.pyqtSignal(int, bool) # (exposure_us, auto_exposure)
+    updatedGainSettings     = _QtCore.pyqtSignal(float, bool) # (gain, auto_gain)
     updatedStrobeMode       = _QtCore.pyqtSignal(str)
     updatedAcquisitionMode  = _QtCore.pyqtSignal(str, str)
     acquisitionReady        = _QtCore.pyqtSignal(object, bool) # (image_descriptor, store_frames)
@@ -263,6 +301,26 @@ class DeviceControl(_QtCore.QObject):
 
     def setAutoExposure(self, auto):
         self._settings.auto_exposure = auto
+
+    def updateGainSettings(self, value, auto):
+        self._settings.gain = (value, auto)
+        value, auto = self._settings.gain
+        if auto == True:
+            self.message.emit("info", "enabled auto-gain")
+        else:
+            self.message.emit("info", f"current gain: {value:.1f}")
+
+    def getGain(self):
+        return self._settings.manual_gain
+
+    def setGain(self, value):
+        self._settings.manual_gain = value
+
+    def getAutoGain(self):
+        return self._settings.auto_gain
+
+    def setAutoGain(self, auto):
+        self._settings.auto_gain = auto
 
     def _log(self, level, message):
         if level == "info":

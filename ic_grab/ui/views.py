@@ -204,6 +204,7 @@ class AcquisitionSettings(_utils.ViewGroup):
     requestedTriggerStatusUpdate    = _QtCore.pyqtSignal(bool)
     requestedFrameRateUpdate        = _QtCore.pyqtSignal(float)
     requestedExposureSettingsUpdate = _QtCore.pyqtSignal(int, bool)
+    requestedGainSettingsUpdate     = _QtCore.pyqtSignal(float, bool)
 
     def __init__(self, title="Acquisition",
                  controller=None,
@@ -218,12 +219,14 @@ class AcquisitionSettings(_utils.ViewGroup):
                                 ("updatedTriggerStatus", "updateWithTriggerStatus"),
                                 ("updatedFrameRate", "updateWithFrameRate"),
                                 ("updatedExposureSettings", "updateWithExposureSettings"),
+                                ("updatedGainSettings", "updateWithGainSettings"),
                                 ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
                             ),
                             from_interface=(
                                 ("requestedTriggerStatusUpdate", "setTriggered"),
                                 ("requestedFrameRateUpdate", "setFrameRate"),
-                                ("requestedExposureSettingsUpdate", "updateExposureSettings")
+                                ("requestedExposureSettingsUpdate", "updateExposureSettings"),
+                                ("requestedGainSettingsUpdate", "updateGainSettings"),
                             )
                          ))
         self._rate = _utils.FormItem("Frame rate (Hz)", _utils.InvalidatableDoubleSpinBox())
@@ -248,14 +251,23 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._exposure.widget.edited.connect(self._exposure.widget.invalidate)
         self._exposure.widget.valueChanged.connect(self.dispatchExposureSettingsUpdate)
 
-        self._gain = _utils.FormItem("Gain", _utils.InvalidatableSpinBox())
-        # TODO: deal with gain settings
+        self._gain = _utils.FormItem("Gain", _utils.InvalidatableDoubleSpinBox())
+        # set up the gain spin box
+        # TODO: configure upon opening of a device
+        self._gain.widget.setDecimals(1)
+        self._gain.widget.setMinimum(0.5)
+        self._gain.widget.setMaximum(8.0)
+        self._gain.widget.setSingleStep(0.1)
+        self._gain.widget.setValue(1.0)
+        self._gain.widget.edited.connect(self._gain.widget.invalidate)
+        self._gain.widget.valueChanged.connect(self.dispatchGainSettingsUpdate)
 
         self._triggered = _QtWidgets.QCheckBox("Use external trigger")
         self._triggered.stateChanged.connect(self.dispatchTriggerStatusUpdate)
         self._autoexp   = _QtWidgets.QCheckBox("Auto-exposure")
         self._autoexp.stateChanged.connect(self.dispatchExposureSettingsUpdate)
         self._autogain  = _QtWidgets.QCheckBox("Auto-gain")
+        self._autogain.stateChanged.connect(self.dispatchGainSettingsUpdate)
         self._addFormItem(self._rate, 0, 0)
         self._layout.addWidget(self._triggered, 0, 2,
                                alignment=_QtCore.Qt.AlignLeft)
@@ -273,7 +285,7 @@ class AcquisitionSettings(_utils.ViewGroup):
         for obj in (self._exposure, self._autoexp):
             obj.setEnabled(val)
         for obj in (self._gain, self._autogain):
-            obj.setEnabled(False)
+            obj.setEnabled(val)
 
     def dispatchTriggerStatusUpdate(self, _=None): # the argument will never be used
         if self._updating == True:
@@ -291,6 +303,12 @@ class AcquisitionSettings(_utils.ViewGroup):
         self.requestedExposureSettingsUpdate.emit(self._exposure.widget.value(),
                                                   self._autoexp.isChecked())
 
+    def dispatchGainSettingsUpdate(self, _=None): # the argument will never be used
+        if (self._updating == True) or (self._gain.widget.editing == True):
+            return
+        self.requestedGainSettingsUpdate.emit(self._gain.widget.value(),
+                                              self._autogain.isChecked())
+
     def updateWithOpeningDevice(self, device):
         self.setEnabled(True)
         self._updating = True
@@ -305,6 +323,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._autoexp.setChecked(device.auto_exposure)
         if device.auto_exposure:
             self._exposure.widget.setEnabled(False)
+
+        # TODO: set ranges of exposure/gain
         self._updating = False
 
     def updateWithClosingDevice(self):
@@ -327,6 +347,14 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._exposure.widget.revalidate()
         self._autoexp.setChecked(auto)
         self._exposure.widget.setEnabled(not auto)
+        self._updating = False
+
+    def updateWithGainSettings(self, val, auto):
+        self._updating = True
+        self._gain.widget.setValue(val)
+        self._gain.widget.revalidate()
+        self._autogain.setChecked(auto)
+        self._gain.widget.setEnabled(not auto)
         self._updating = False
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
