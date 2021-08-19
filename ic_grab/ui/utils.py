@@ -178,6 +178,32 @@ class ViewGroup(_QtWidgets.QGroupBox, ControllerInterface):
         self._layout.addWidget(item.label,  row,  col, alignment=_QtCore.Qt.AlignRight)
         self._layout.addWidget(item.widget, row, col+1, 1, widget_colspan)
 
+    def _addWidget(self, widget, row, col, rowspan=1, colspan=1, alignment=_QtCore.Qt.AlignLeft):
+        self._layout.addWidget(widget, row, col, rowspan, colspan, alignment=alignment)
+
+class InvalidatableLineEdit(_QtWidgets.QLineEdit):
+    edited = _QtCore.pyqtSignal()
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent=parent)
+        self.textChanged.connect(self.dispatchEdited)
+        self._editing  = False
+
+    @property
+    def editing(self):
+        return self._editing
+
+    def dispatchEdited(self):
+        self._editing = True
+        self.edited.emit()
+
+    def invalidate(self):
+        set_dirty(self)
+
+    def revalidate(self):
+        self._editing = False
+        clear_dirty(self)
+
 class InvalidatableSpinBox(_QtWidgets.QSpinBox):
     """invalidatable version of QSpinBox."""
     edited = _QtCore.pyqtSignal()

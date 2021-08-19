@@ -394,9 +394,11 @@ class StrobeModeSelector(_QtWidgets.QComboBox, _utils.ControllerInterface):
         self._updating = False
 
 class ExperimentSettings(_utils.ViewGroup):
-    requestSubjectUpdate = _QtCore.pyqtSignal(str)
-    requestDomainUpdate  = _QtCore.pyqtSignal(str)
-    requestDateUpdate    = _QtCore.pyqtSignal(_QtCore.QDate)
+    requestSubjectUpdate   = _QtCore.pyqtSignal(str)
+    requestDomainUpdate    = _QtCore.pyqtSignal(str)
+    requestDateUpdate      = _QtCore.pyqtSignal(_QtCore.QDate)
+    requestIndexUpdate     = _QtCore.pyqtSignal(int)
+    requestAppendageUpdate = _QtCore.pyqtSignal(str)
 
     def __init__(self, title="Experiment",
                  controller=None,
@@ -414,36 +416,52 @@ class ExperimentSettings(_utils.ViewGroup):
                          ))
         self._exp_conns  = _utils.ControllerConnections(self,
                                 from_controller=(
-                                    ("updatedSubject", "updateWithSubject"),
-                                    ("updatedDomain",  "updateWithDomain"),
-                                    ("updatedDate",    "updateWithDate"),
+                                    ("updatedSubject",   "updateWithSubject"),
+                                    ("updatedDomain",    "updateWithDomain"),
+                                    ("updatedIndex",     "updateWithIndex"),
+                                    ("updatedDate",      "updateWithDate"),
+                                    ("updatedAppendage", "updateWithAppendage"),
                                 ),
                                 from_interface=(
-                                    ("requestSubjectUpdate", "setSubject"),
-                                    ("requestDomainUpdate",  "setDomain"),
-                                    ("requestDateUpdate",    "setQDate"),
+                                    ("requestSubjectUpdate",   "setSubject"),
+                                    ("requestDomainUpdate",    "setDomain"),
+                                    ("requestDateUpdate",      "setQDate"),
+                                    ("requestIndexUpdate",     "setIndex"),
+                                    ("requestAppendageUpdate", "setAppendage"),
                                 )
                            )
         self._experiment = None
         self.experiment  = experiment
 
-        self._subject = _utils.FormItem("Subject", _QtWidgets.QLineEdit(self.subject))
+        self._subject = _utils.FormItem("Subject", _utils.InvalidatableLineEdit(self.subject))
         self._date    = _utils.FormItem("Date", _QtWidgets.QDateEdit(self.date))
-        self._domain  = _utils.FormItem("Domain", _QtWidgets.QLineEdit(self.domain))
-        self._addFormItem(self._subject,   0, 0)
-        self._addFormItem(self._date,      1, 0)
-        self._addFormItem(self._domain,    2, 0)
+        self._index   = _utils.FormItem("Session index", _utils.InvalidatableSpinBox())
+        self._domain  = _utils.FormItem("Domain", _utils.InvalidatableLineEdit(self.domain))
+        self._append  = _utils.FormItem("Appendage", _utils.InvalidatableLineEdit(self.appendage))
+        self._addFormItem(self._subject,   0, 0, widget_colspan=2)
+        self._addFormItem(self._date,      1, 0, widget_colspan=2)
+        self._addFormItem(self._index,     2, 0)
+        self._addFormItem(self._domain,    3, 0, widget_colspan=2)
+        self._addFormItem(self._append,    4, 0, widget_colspan=2)
         self._layout.setColumnStretch(0, 2)
-        self._layout.setColumnStretch(1, 3)
+        self._layout.setColumnStretch(1, 1)
+        self._layout.setColumnStretch(2, 1)
 
         self._date.widget.setDisplayFormat(self.qDate_format)
         self._date.widget.setCalendarPopup(True)
 
-        self._subject.widget.textChanged.connect(self.subjectEditCallback)
+        self._index.widget.setMinimum(1)
+        self._index.widget.setMaximum(100)
+        self._index.widget.setValue(1)
+
+        self._subject.widget.textChanged.connect(self._subject.widget.invalidate)
         self._subject.widget.editingFinished.connect(self.dispatchSubjectUpdate)
-        self._domain.widget.textChanged.connect(self.domainEditCallback)
+        self._domain.widget.textChanged.connect(self._domain.widget.invalidate)
         self._domain.widget.editingFinished.connect(self.dispatchDomainUpdate)
         self._date.widget.dateChanged.connect(self.dispatchDateUpdate)
+        self._index.widget.valueChanged.connect(self.dispatchIndexUpdate)
+        self._append.widget.textChanged.connect(self._append.widget.invalidate)
+        self._append.widget.editingFinished.connect(self.dispatchAppendageUpdate)
 
         self._updating = False
 
@@ -483,6 +501,20 @@ class ExperimentSettings(_utils.ViewGroup):
             return self._experiment.domain
 
     @property
+    def index(self):
+        if self._experiment is None:
+            return 1
+        else:
+            return self._experiment.index
+
+    @property
+    def appendage(self):
+        if self._experiment is None:
+            return ""
+        else:
+            return self._experiment.appendage
+
+    @property
     def qDate_format(self):
         if self._experiment is None:
             return "yyyy-MM-dd"
@@ -496,14 +528,6 @@ class ExperimentSettings(_utils.ViewGroup):
     def updateWithAcquisitionMode(self, oldmode, newmode):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
 
-    def subjectEditCallback(self, _):
-        if not self._updating:
-            _utils.set_dirty(self._subject.widget)
-
-    def domainEditCallback(self, _):
-        if not self._updating:
-            _utils.set_dirty(self._domain.widget)
-
     def dispatchSubjectUpdate(self):
         if not self._updating:
             self.requestSubjectUpdate.emit(self._subject.widget.text())
@@ -516,16 +540,26 @@ class ExperimentSettings(_utils.ViewGroup):
         if not self._updating:
             self.requestDateUpdate.emit(value)
 
+    def dispatchIndexUpdate(self, value):
+        if (self._updating == True) or (self._index.widget.editing == True):
+            return
+        self.requestIndexUpdate.emit(value)
+
+    def dispatchAppendageUpdate(self):
+        if self._updating == True:
+            return
+        self.requestAppendageUpdate.emit(self._append.widget.text())
+
     def updateWithSubject(self, value):
         self._updating = True
-        _utils.clear_dirty(self._subject.widget)
         self._subject.widget.setText(value)
+        self._subject.widget.revalidate()
         self._updating = False
 
     def updateWithDomain(self, value):
         self._updating = True
-        _utils.clear_dirty(self._domain.widget)
         self._domain.widget.setText(value)
+        self._domain.widget.revalidate()
         self._updating = False
 
     def updateWithDate(self, year, month, day):
@@ -533,8 +567,19 @@ class ExperimentSettings(_utils.ViewGroup):
         self._date.widget.setDate(_QtCore.QDate(year, month, day))
         self._updating = False
 
+    def updateWithIndex(self, index):
+        self._updating = True
+        self._index.widget.setValue(index)
+        self._updating = False
+
+    def updateWithAppendage(self, append):
+        self._updating = True
+        self._append.widget.setText(append)
+        self._append.widget.revalidate()
+        self._updating = False
+
 class StorageSettings(_utils.ViewGroup):
-    DEFAULT_NAME_PATTERN = "{subject}_{date}_{domain}_{time}"
+    DEFAULT_NAME_PATTERN = "{subject}_{date}_{domain}_{time}{appendage}"
 
     def __init__(self, title="Storage",
                  controller=None,

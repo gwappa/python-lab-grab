@@ -74,7 +74,7 @@ try:
             self._layout.addWidget(self._commands, 5, 0, 1, 2)
             self._layout.setColumnStretch(0, 2)
             self._layout.setColumnStretch(1, 1)
-            self._layout.setRowStretch(0, 4)
+            self._layout.setRowStretch(0, 6)
             self._layout.setRowStretch(1, 2)
             self._layout.setRowStretch(2, 4)
             self._layout.setRowStretch(3, 6)
