@@ -149,16 +149,14 @@ class FrameFormatSettings(_utils.ViewGroup):
         self._format = _utils.FormItem("Format", _QtWidgets.QComboBox())
         self._x      = _utils.FormItem("Offset X", _QtWidgets.QSpinBox())
         self._y      = _utils.FormItem("Offset Y", _QtWidgets.QSpinBox())
-        self._w      = _utils.FormItem("Width X", _QtWidgets.QSpinBox())
-        self._h      = _utils.FormItem("Height Y", _QtWidgets.QSpinBox())
+        self._center = _QtWidgets.QCheckBox("Center ROI")
         for row, obj in enumerate((self._format,
                                    self._x,
-                                   self._y,
-                                   self._w,
-                                   self._h)):
+                                   self._y,)):
             self._addFormItem(obj, row, 0)
+        self._layout.addWidget(self._center, 3, 1)
         # FIXME: add saved ROI feature
-        for obj in (self._x, self._y, self._w, self._h):
+        for obj in (self._x, self._y, self._center):
             obj.setEnabled(False)
 
         self.setEnabled(False)
@@ -262,6 +260,10 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._gain.widget.edited.connect(self._gain.widget.invalidate)
         self._gain.widget.valueChanged.connect(self.dispatchGainSettingsUpdate)
 
+        self._binning = _utils.FormItem("Binning", _QtWidgets.QComboBox())
+        self._binning.widget.addItem("1")
+        # TODO: specify actions (probably implement a dedicated class)
+
         self._triggered = _QtWidgets.QCheckBox("Use external trigger")
         self._triggered.stateChanged.connect(self.dispatchTriggerStatusUpdate)
         self._autoexp   = _QtWidgets.QCheckBox("Auto-exposure")
@@ -275,7 +277,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._layout.addWidget(self._autoexp, 1, 2)
         self._addFormItem(self._gain, 2, 0)
         self._layout.addWidget(self._autogain, 2, 2)
-        self._addFormItem(self._strobe, 3, 0)
+        self._addFormItem(self._binning, 3, 0)
+        self._addFormItem(self._strobe, 4, 0)
 
         self.setEnabled(False)
 
@@ -286,6 +289,7 @@ class AcquisitionSettings(_utils.ViewGroup):
             obj.setEnabled(val)
         for obj in (self._gain, self._autogain):
             obj.setEnabled(val)
+        self._binning.setEnabled(False)
 
     def dispatchTriggerStatusUpdate(self, _=None): # the argument will never be used
         if self._updating == True:
