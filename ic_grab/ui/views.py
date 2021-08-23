@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from pathlib import Path as _Path
+from datetime import datetime as _datetime
 import numpy as _np
 
 import pyqtgraph as _pg
@@ -579,6 +581,8 @@ class ExperimentSettings(_utils.ViewGroup):
         self._updating = False
 
 class StorageSettings(_utils.ViewGroup):
+    EXPERIMENT_ATTRS     = ("subject", "datestr", "indexstr", "domain", "appendagestr")
+    TIMESTAMP_FORMAT     = "%H%M%S"
     DEFAULT_NAME_PATTERN = "{subject}_{date}_{domain}_{time}{appendage}"
 
     def __init__(self, title="Storage",
@@ -596,24 +600,132 @@ class StorageSettings(_utils.ViewGroup):
 
                             )
                          ))
+        self._exp_conns  = _utils.ControllerConnections(self,
+                                from_controller=(
+                                    ("updatedSubject",   "updateFileName"),
+                                    ("updatedDomain",    "updateFileName"),
+                                    ("updatedIndex",     "updateFileName"),
+                                    ("updatedDate",      "updateFileName"),
+                                    ("updatedAppendage", "updateFileName"),
+                                ),
+                                from_interface=(
 
-        # FIXME: add directory search option
-        # TODO: connect the widgets to Storage service
-        self._directory = _utils.FormItem("Directory", _QtWidgets.QLineEdit())
-        self._pattern = _utils.FormItem("File name pattern", _QtWidgets.QLineEdit(self.DEFAULT_NAME_PATTERN))
-        self._file    = _utils.FormItem("Next file name: ", _QtWidgets.QLabel("<unknown>"))
+                                )
+                           )
+        self._experiment = None
+        self.experiment  = experiment
+
+        # TODO: connect the widgets to Storage service?
+        self._directory = _utils.FormItem("Directory", DirectorySelector())
+        self._pattern = _utils.FormItem("File name pattern", _utils.InvalidatableLineEdit(self.DEFAULT_NAME_PATTERN))
+        self._pattern.widget.edited.connect(self._pattern.widget.invalidate)
+        self._pattern.widget.editingFinished.connect(self.updateFileName)
+        self._file    = _utils.FormItem("Sample file name: ", _QtWidgets.QLabel("<unknown>"))
         self._codec   = _utils.FormItem("Video format", _QtWidgets.QComboBox())
+        self._codec.widget.addItem("Raw video (*.avi)")
         self._addFormItem(self._codec,     0, 0)
         self._addFormItem(self._directory, 1, 0)
         self._addFormItem(self._pattern,   2, 0)
         self._addFormItem(self._file,      3, 0)
 
-        # TODO: connect with experiment settings widget
+        # initialize the file-name field
+        self.updateFileName()
+        self.setEnabled(True)
+
+    @property
+    def experiment(self):
+        return self._experiment
+
+    @experiment.setter
+    def experiment(self, obj):
+        if self._experiment is not None:
+            for src, dst in self._exp_conns.iterate(self._experiment):
+                src.disconnect(dst)
+        self._experiment = obj
+        if self._experiment is not None:
+            for src, dst in self._exp_conns.iterate(self._experiment):
+                src.connect(dst)
 
     def setEnabled(self, state):
-        for obj in (self._directory, self._pattern, self._codec):
+        for obj in (self._directory, self._pattern,):
             obj.setEnabled(state)
+        for obj in (self._codec,):
+            obj.setEnabled(False)
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
         # TODO: start storing the frames
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+
+    def updateFileName(self, _=None):
+        self._file.widget.setText(self.filename)
+        # in case it was invalidated
+        self._pattern.widget.revalidate()
+
+    @property
+    def format_dict(self):
+        if self._experiment is not None:
+            opts = dict((attrname, getattr(self._experiment, attrname))\
+                        for attrname in self.EXPERIMENT_ATTRS)
+        else:
+            opts = dict((attrname, "??") \
+                        for attrname in self.EXPERIMENT_ATTRS)
+        for name in ("date", "index", "appendage"):
+            opts[name] = opts.pop(name + "str")
+        opts["time"]   = _datetime.now().strftime(self.TIMESTAMP_FORMAT)
+        opts["suffix"] = ".avi"
+        return opts
+
+    @property
+    def filename(self):
+        pattern = self._pattern.widget.text()
+        if "{suffix}" not in pattern:
+            pattern = pattern + "{suffix}"
+        return pattern.format(**(self.format_dict))
+
+    @property
+    def path(self):
+        pass
+
+class DirectorySelector(_QtWidgets.QWidget):
+    directorySelected = _QtCore.pyqtSignal(str)
+
+    def __init__(self, path="", parent=None):
+        path = str(_Path(path).resolve())
+
+        super().__init__(parent=parent)
+        self._chooser = _QtWidgets.QFileDialog(self, _QtCore.Qt.Dialog)
+        self._chooser.setAcceptMode(_QtWidgets.QFileDialog.AcceptOpen)
+        self._chooser.setFileMode(_QtWidgets.QFileDialog.Directory)
+        self._chooser.setModal(True)
+        self._chooser.setWindowTitle("Directory to save videos")
+        self._chooser.accepted.connect(self.updateFromChooser)
+        self._disp   = _QtWidgets.QLabel(path)
+        self._search = _QtWidgets.QPushButton("Search...")
+        self._search.clicked.connect(self.startEditing)
+
+        self._layout = _QtWidgets.QGridLayout()
+        self.setLayout(self._layout)
+        self._layout.addWidget(self._disp, 0, 0)
+        self._layout.addWidget(self._search, 0, 1)
+        self._layout.setColumnStretch(0, 5)
+        self._layout.setColumnStretch(1, 1)
+
+    @property
+    def directory(self):
+        return self._disp.text()
+
+    @directory.setter
+    def directory(self, val):
+        path = _Path(str(val)).resolve()
+        self._disp.setText(str(path))
+        self.directoryChanged.emit(str(path))
+
+    def startEditing(self):
+        # somehow _chooser.exec() (or any other static methods to show a modal dialog)
+        # does not work. So I chose to explicitly show() a modal dialog here
+        path = _Path(self._disp.text())
+        # FIXME: cannot pre-specify the selected directory!
+        self._chooser.show()
+
+    def updateFromChooser(self):
+        self.directory = self._chooser.selectedFiles()[0]

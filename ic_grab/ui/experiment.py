@@ -26,6 +26,7 @@ from pyqtgraph.Qt import QtCore as _QtCore
 class Experiment(_QtCore.QObject):
     DEFAULT_SUBJECT  = "unspecified"
     DEFAULT_DOMAIN   = "camera"
+    INDEX_DIGITS     = 3
 
     updatedSubject   = _QtCore.pyqtSignal(str)
     updatedDate      = _QtCore.pyqtSignal(int, int, int)
@@ -122,6 +123,22 @@ class Experiment(_QtCore.QObject):
             return ""
         else:
             return "_" + self._append
+
+    @property
+    def datestr(self):
+        return self.date.strftime(self.date_format)
+
+    @property
+    def indexstr(self):
+        return str(self.index).zfill(self.INDEX_DIGITS)
+
+    @property
+    def appendagestr(self):
+        append = self.appendage
+        if len(append) == 0:
+            return ""
+        else:
+            return "_" + append
 
     subject   = property(fget=getSubject,  fset=setSubject)
     date      = property(fget=getDate,     fset=setDate)

@@ -33,7 +33,7 @@ try:
 
     class MainWindow(_QtWidgets.QMainWindow):
         DEFAULT_TITLE    = "IC-GRAB"
-        DEFAULT_GEOMETRY = (100, 100, 1000, 720) # X, Y, W, H
+        DEFAULT_GEOMETRY = (100, 100, 1200, 720) # X, Y, W, H
 
         def __init__(self, title=None, parent=None, show=True):
             super().__init__(parent=parent)
