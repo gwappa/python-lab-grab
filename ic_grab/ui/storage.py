@@ -22,16 +22,29 @@
 
 from pathlib import Path as _Path
 from datetime import datetime as _datetime
+from collections import namedtuple as _namedtuple
+
 from pyqtgraph.Qt import QtCore as _QtCore
+
+class Codec(_namedtuple("_Codec", ("name", "suffix"))):
+    @property
+    def description(self):
+        return f"{self.name} (*{self.suffix})"
 
 class StorageService(_QtCore.QObject):
     EXPERIMENT_ATTRIBUTES = ("subject", "datestr", "indexstr", "domain", "appendagestr")
     TIMESTAMP_FORMAT      = "%H%M%S"
     DEFAULT_NAME_PATTERN  = "{subject}_{date}_{domain}_{time}{appendage}"
 
+    CODECS = (
+        Codec("Raw video", ".avi"),
+        Codec("MJPEG, CPU", ".avi"),
+        Codec("H.264, NVIDIA-GPU", ".avi"),
+    )
+
     _singleton = None
 
-    updatedCodec     = _QtCore.pyqtSignal(str) # FIXME
+    updatedCodec     = _QtCore.pyqtSignal(object) # a Codec object
     updatedDirectory = _QtCore.pyqtSignal(str)
     updatedPattern   = _QtCore.pyqtSignal(str)
     updatedFileName  = _QtCore.pyqtSignal(str)
@@ -50,7 +63,7 @@ class StorageService(_QtCore.QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self._codec      = None # FIXME
+        self._codec      = self.CODECS[0]
         self._directory  = str(_Path().resolve())
         self._pattern    = self.DEFAULT_NAME_PATTERN
 
@@ -61,8 +74,14 @@ class StorageService(_QtCore.QObject):
         return self._codec
 
     def setCodec(self, value):
-        # FIXME
-        self._codec = str(value)
+        if isinstance(value, str):
+            for codec in self.list_codecs():
+                if codec.description == value:
+                    value = codec
+                    break
+            if isinstance(value, str):
+                raise ValueError(f"codec not found: '{value}'")
+        self._codec = value
         self.updatedCodec.emit(self._codec)
         self.updateFileName()
 
@@ -94,10 +113,12 @@ class StorageService(_QtCore.QObject):
     def as_path(self, filename):
         return _Path(self._directory) / filename
 
+    def list_codecs(self):
+        return self.CODECS
+
     @property
     def suffix(self):
-        # FIXME
-        return ".avi"
+        return self._codec.suffix
 
     @property
     def format_dict(self):

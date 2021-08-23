@@ -607,6 +607,7 @@ class StorageSettings(_utils.ViewGroup):
                                         ("updatedDirectory", "updateWithDirectory"),
                                         ("updatedPattern",   "updateWithPattern"),
                                         ("updatedFileName",  "updateWithFileName"),
+                                        ("updatedCodec",     "updateWithCodec"),
                                     ),
                                     from_interface=(
                                         ("requestedCodecUpdate", "setCodec"),
@@ -617,7 +618,6 @@ class StorageSettings(_utils.ViewGroup):
         self._service = None
         self.service  = storage_service
 
-        # TODO: connect the widgets to Storage service?
         self._directory = _utils.FormItem("Directory", DirectorySelector(self._service.directory))
         self._directory.widget.directorySelected.connect(self.dispatchDirectoryUpdate)
         self._pattern = _utils.FormItem("File name pattern", _utils.InvalidatableLineEdit(self.service.pattern))
@@ -625,7 +625,10 @@ class StorageSettings(_utils.ViewGroup):
         self._pattern.widget.editingFinished.connect(self.dispatchPatternUpdate)
         self._file    = _utils.FormItem(self.FILE_DESC_NOGRAB, _QtWidgets.QLabel(self._service.filename))
         self._codec   = _utils.FormItem("Video format", _QtWidgets.QComboBox())
-        self._codec.widget.addItem("Raw video (*.avi)")
+        for codec in self._service.list_codecs():
+            self._codec.widget.addItem(codec.description)
+        self._codec.widget.setCurrentText(self._service.codec.description)
+        self._codec.widget.currentTextChanged.connect(self.dispatchCodecUpdate)
         self._addFormItem(self._codec,     0, 0)
         self._addFormItem(self._directory, 1, 0)
         self._addFormItem(self._pattern,   2, 0)
@@ -648,10 +651,13 @@ class StorageSettings(_utils.ViewGroup):
                 src.connect(dst)
 
     def setEnabled(self, state):
-        for obj in (self._directory, self._pattern,):
+        for obj in (self._directory, self._pattern, self._codec,):
             obj.setEnabled(state)
-        for obj in (self._codec,):
-            obj.setEnabled(False)
+
+    def dispatchCodecUpdate(self, value):
+        if self._updating == True:
+            return
+        self.requestedCodecUpdate.emit(value)
 
     def dispatchDirectoryUpdate(self, value):
         if self._updating == True:
@@ -662,6 +668,11 @@ class StorageSettings(_utils.ViewGroup):
         if self._updating == True:
             return
         self.requestedPatternUpdate.emit(self._pattern.widget.text())
+
+    def updateWithCodec(self, codec):
+        self._updating = True
+        self._codec.widget.setCurrentText(value.description)
+        self._updating = False
 
     def updateWithDirectory(self, value):
         self._updating = True
