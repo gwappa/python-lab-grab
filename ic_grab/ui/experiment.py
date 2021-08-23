@@ -28,6 +28,7 @@ class Experiment(_QtCore.QObject):
     DEFAULT_DOMAIN   = "camera"
     INDEX_DIGITS     = 3
 
+    updated          = _QtCore.pyqtSignal()
     updatedSubject   = _QtCore.pyqtSignal(str)
     updatedDate      = _QtCore.pyqtSignal(int, int, int)
     updatedDomain    = _QtCore.pyqtSignal(str)
@@ -62,6 +63,7 @@ class Experiment(_QtCore.QObject):
     def setSubject(self, value):
         self._subject = value
         self.updatedSubject.emit(value)
+        self.updated.emit()
         self.message.emit("info", f"experiment subject: {value}")
 
     def getDate(self):
@@ -71,6 +73,7 @@ class Experiment(_QtCore.QObject):
         ## FIXME: only accepts datetime for the time being
         self._date = value
         self.updatedDate.emit(value.year, value.month, value.day)
+        self.updated.emit()
         self.message.emit("info", f"experiment date: {value.strftime(self.date_format)}")
 
     def getQDate(self):
@@ -85,6 +88,7 @@ class Experiment(_QtCore.QObject):
     def setIndex(self, value):
         self._index = int(value)
         self.updatedIndex.emit(self._index)
+        self.updated.emit()
         self.message.emit("info", f"session index: {self._index:03d}")
 
     def getIndexStr(self):
@@ -99,6 +103,7 @@ class Experiment(_QtCore.QObject):
     def setDomain(self, value):
         self._domain = value
         self.updatedDomain.emit(value)
+        self.updated.emit()
         self.message.emit("info", f"experiment data domain: {value}")
 
     def getAppendage(self):
@@ -107,6 +112,7 @@ class Experiment(_QtCore.QObject):
     def setAppendage(self, value):
         self._append = str(value).strip()
         self.updatedAppendage.emit(self._append)
+        self.updated.emit()
         self.message.emit("info", f"file appendage: {self._append}")
 
     @property
