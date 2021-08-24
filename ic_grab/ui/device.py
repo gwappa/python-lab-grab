@@ -242,15 +242,6 @@ class DeviceControl(_QtCore.QObject):
         self._settings = DeviceSettings(parent=self)
         self._mode     = _utils.AcquisitionModes.IDLE
 
-    @property
-    def settings(self):
-        """the grabber settings as a dictionary object."""
-        return self._settings.as_dict() # FIXME
-
-    @settings.setter
-    def settings(self, cfg):
-        self._settings.load_dict(cfg) # FIXME
-
     def getFormat(self):
         return self._settings.format
 
@@ -357,7 +348,7 @@ class DeviceControl(_QtCore.QObject):
         oldmode = self._mode
         try:
             self._startAcquisitionMode(mode)
-            self._mode = mode # TODO: update the device
+            self._mode = mode
             self.updatedAcquisitionMode.emit(oldmode, mode)
             if mode == _utils.AcquisitionModes.IDLE:
                 self.message.emit("info", f"finished {oldmode}")

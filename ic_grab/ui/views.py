@@ -57,7 +57,7 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
                                             ))
 
     def updateWithFormat(self, format_name):
-        ## TODO: merge with prepareForAcquisition()
+        ## TODO: merge with prepareForAcquisition()??
         if len(format_name) == 0:
             return
         fmt  = _utils.FrameFormat.from_name(format_name)
@@ -70,6 +70,7 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
         dims = desc.shape
         self._scene.setSceneRect(_QtCore.QRectF(0.0, 0.0, float(dims[1]), float(dims[0])))
         self._image.setImage(_np.zeros(dims, dtype=desc.dtype))
+        # TODO: set transform to fit the image to the rect
 
     def updateWithFrame(self, frame_index, frame):
         self._image.setImage(frame)
@@ -156,21 +157,15 @@ class FrameFormatSettings(_utils.ViewGroup):
                                    self._y,)):
             self._addFormItem(obj, row, 0)
         self._layout.addWidget(self._center, 3, 1)
-        # FIXME: add saved ROI feature
-        for obj in (self._x, self._y, self._center):
-            obj.setEnabled(False)
 
         self.setEnabled(False)
         self._format.widget.currentTextChanged.connect(self.dispatchFormatUpdate)
 
     def setEnabled(self, val):
-        for obj in (self._format,
-                    # self._x,
-                    # self._y,
-                    # self._w,
-                    # self._h,
-                    ):
+        for obj in (self._format,):
             obj.setEnabled(val)
+        for obj in (self._x, self._y, self._center):
+            obj.setEnabled(False)
 
     def dispatchFormatUpdate(self, fmt):
         if self._updating == False:
@@ -230,7 +225,6 @@ class AcquisitionSettings(_utils.ViewGroup):
                          ))
         self._rate = _utils.FormItem("Frame rate (Hz)", _utils.InvalidatableDoubleSpinBox())
         # set up the spin box
-        # TODO: configure upon opening a device?
         self._rate.widget.setDecimals(1)
         self._rate.widget.setMaximum(200)
         self._rate.widget.setMinimum(1.0)
@@ -243,7 +237,6 @@ class AcquisitionSettings(_utils.ViewGroup):
 
         self._exposure = _utils.FormItem("Exposure (us)", _utils.InvalidatableSpinBox())
         # set up the spin box
-        # TODO: configure upon opening a device
         self._exposure.widget.setMinimum(1)
         self._exposure.widget.setMaximum(100000)
         self._exposure.widget.setValue(10000)
@@ -252,7 +245,6 @@ class AcquisitionSettings(_utils.ViewGroup):
 
         self._gain = _utils.FormItem("Gain", _utils.InvalidatableDoubleSpinBox())
         # set up the gain spin box
-        # TODO: configure upon opening of a device
         self._gain.widget.setDecimals(1)
         self._gain.widget.setMinimum(0.5)
         self._gain.widget.setMaximum(8.0)
@@ -329,7 +321,7 @@ class AcquisitionSettings(_utils.ViewGroup):
         if device.auto_exposure:
             self._exposure.widget.setEnabled(False)
 
-        # TODO: set ranges of exposure/gain
+        # TODO: set ranges of rate/exposure/gain
         self._updating = False
 
     def updateWithClosingDevice(self):
@@ -695,7 +687,6 @@ class StorageSettings(_utils.ViewGroup):
         self._updating = False
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
-        # TODO: start storing the frames
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
         self._file.setEnabled(newmode != _utils.AcquisitionModes.FOCUS)
         if newmode == _utils.AcquisitionModes.GRAB:
