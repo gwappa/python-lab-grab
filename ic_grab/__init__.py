@@ -46,10 +46,3 @@ def run(device=None):
     main = ui.MainWindow()
     # TODO: attempt to open the device in case it is not None
     ui.run()
-    # grabber = _tisgrabber.TIS_CAM()
-    # grabber.showDeviceSelectionDialog()
-    # if grabber.isDeviceValid():
-    #     LOGGER.info(f"device selected: {grabber.uniqueDeviceName}")
-    # else:
-    #     LOGGER.info("no device was selected")
-    #     return
