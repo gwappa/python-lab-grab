@@ -66,7 +66,7 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
         self._image.setImage(_np.zeros(dims, dtype=_np.uint8))
         # TODO: set transform to fit the image to the rect
 
-    def prepareForAcquisition(self, desc, store_frames=None):
+    def prepareForAcquisition(self, rate, desc, store_frames=None):
         dims = desc.shape
         self._scene.setSceneRect(_QtCore.QRectF(0.0, 0.0, float(dims[1]), float(dims[0])))
         self._image.setImage(_np.zeros(dims, dtype=desc.dtype))
@@ -597,6 +597,8 @@ class StorageSettings(_utils.ViewGroup):
                          connections=dict(
                             from_controller=(
                                 ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
+                                ("acquisitionReady", "prepareForAcquisition"),
+                                ("acquisitionEnded", "finalizeAcquisition"),
                             ),
                             from_interface=(
 
@@ -671,7 +673,7 @@ class StorageSettings(_utils.ViewGroup):
 
     def updateWithCodec(self, codec):
         self._updating = True
-        self._codec.widget.setCurrentText(value.description)
+        self._codec.widget.setCurrentText(codec.description)
         self._updating = False
 
     def updateWithDirectory(self, value):
@@ -700,6 +702,20 @@ class StorageSettings(_utils.ViewGroup):
             self._file.label.setText(self.FILE_DESC_GRAB)
         else:
             self._file.label.setText(self.FILE_DESC_NOGRAB)
+
+    def prepareForAcquisition(self, rate, descriptor, store_frames):
+        if store_frames == True:
+            self._service.prepare(framerate=rate, descriptor=descriptor)
+            self._controller.frameReady.connect(self._service.write)
+
+    def finalizeAcquisition(self):
+        if self._service.is_running():
+            self._service.close()
+        # in any case
+        try:
+            self._controller.frameReady.disconnect(self._service.write)
+        except TypeError: # it has not been connected
+            pass
 
 class DirectorySelector(_QtWidgets.QWidget):
     directorySelected = _QtCore.pyqtSignal(str)

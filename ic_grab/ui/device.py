@@ -231,7 +231,7 @@ class DeviceControl(_QtCore.QObject):
     updatedGainSettings     = _QtCore.pyqtSignal(float, bool) # (gain, auto_gain)
     updatedStrobeMode       = _QtCore.pyqtSignal(str)
     updatedAcquisitionMode  = _QtCore.pyqtSignal(str, str)
-    acquisitionReady        = _QtCore.pyqtSignal(object, bool) # (image_descriptor, store_frames)
+    acquisitionReady        = _QtCore.pyqtSignal(object, object, bool) # (framerate, image_descriptor, store_frames)
     acquisitionEnded        = _QtCore.pyqtSignal()
     frameReady              = _QtCore.pyqtSignal(int, object)
     message                 = _QtCore.pyqtSignal(str, str)
@@ -388,7 +388,8 @@ class DeviceControl(_QtCore.QObject):
                 device.prepare(preview=False)
 
             # let the other modules prepare for acquisition
-            self.acquisitionReady.emit(device.image_descriptor,
+            self.acquisitionReady.emit(self._settings.frame_rate,
+                                       device.image_descriptor,
                                        mode == _utils.AcquisitionModes.GRAB)
             device.start(preview=False, update_descriptor=False)
         else:
