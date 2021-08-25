@@ -26,26 +26,29 @@ from collections import namedtuple as _namedtuple
 import subprocess as _sp
 import warnings as _warnings
 import sys as _sys
+import re as _re
 
 import numpy as _np
 from pyqtgraph.Qt import QtCore as _QtCore
 
 from .. import LOGGER as _LOGGER
 
-def find_ffmpeg():
-    proc = _sp.run(["where", "ffmpeg"], shell=True,
+def find_command(cmd):
+    proc = _sp.run(["where", cmd], shell=True,
                    capture_output=True)
     if proc.returncode != 0:
-        _warnings.warn(f"failed to find the 'ffmpeg' command: 'where' returned code {proc.returncode}")
+        _warnings.warn(f"failed to find the '{cmd}' command: 'where' returned code {proc.returncode}")
         return None
 
     commands = [item.strip() for item in proc.stdout.decode().split("\n")]
     if len(commands) == 0:
-        _warnings.warn(f"the 'ffmpeg' command not found")
+        _warnings.warn(f"the '{cmd}' command not found")
         return None
     return commands[0]
 
-FFMPEG_PATH  = find_ffmpeg()
+### ffmpeg-related ###
+
+FFMPEG_PATH  = find_command('ffmpeg')
 BASE_OPTIONS = [
     "-hide_banner", "-loglevel", "warning", "-stats", # render the command to be (more) quiet
     "-y", # overwrite by default
@@ -53,7 +56,7 @@ BASE_OPTIONS = [
 if FFMPEG_PATH is not None:
     _LOGGER.info(f"found 'ffmpeg' at: {FFMPEG_PATH}")
 
-def input_options(width, height, framerate, pixel_format="rgb24"):
+def ffmpeg_input_options(width, height, framerate, pixel_format="rgb24"):
     return [
         "-f", "rawvideo",
         "-vcodec", "rawvideo",
@@ -64,13 +67,83 @@ def input_options(width, height, framerate, pixel_format="rgb24"):
         "-an", # do not expect any audio
     ]
 
-class Encoders:
-    NONE   = None
+### encoder-related
+
+def number_of_nvidia_gpus():
+    nvidia_smi = find_command('nvidia-smi')
+    if nvidia_smi is None:
+        return 0  # cannot detect NVIDA driver
+
+    # check the version of the driver
+    proc = _sp.run([nvidia_smi], shell=True, capture_output=True)
+    if proc.returncode != 0:
+        _warnings.warn(f"failed to run 'nvidia-smi': code {proc.returncode}")
+        return 0
+    out = [line.strip() for line in proc.stdout.decode().split("\n") if len(line.strip()) > 0]
+    pattern = _re.compile(r"Driver Version: (\d+(\.\d+)?)") # trying to capture only 'xx.yy', instead of 'xx.yy.zz'
+    version = None
+    for line in out:
+        matched = pattern.search(line)
+        if matched:
+            version = matched.group(1)
+            break
+    if version is None:
+        _LOGGER.warning("failed to parse the driver version from 'nvidia-smi'")
+        return 0
+    major, minor = [int(digits) for digits in version.split(".")]
+    _LOGGER.info(f"NVIDIA driver version: {version} (major={major}, minor={minor})")
+    if major < 450:
+        _LOGGER.warning("NVIDIA driver must be newer than 450.xx: please update via https://www.nvidia.com/Download/driverResults.aspx/176854/en-us")
+        return 0
+
+    # check the number of GPUs abailable
+    proc = _sp.run([nvidia_smi, "-L"], shell=True,
+                   capture_output=True)
+    if proc.returncode != 0:
+        err = proc.stderr.decode().strip()
+        _warnings.warn(f"failed to list up available GPUs: 'nvidia-smi' returned code {proc.returncode} ({err})")
+        return 0
+
+    GPUs = [item.strip() for item in proc.stdout.decode().split("\n") if len(item.strip()) > 0]
+    _LOGGER.info(f"number of NVIDIA GPUs available: {len(GPUs)}")
+    ## FIXME
+    _LOGGER.warn("note that having a GPU does not ascertain the availability of NVEnc functionality: check the list of supported GPUs at: https://developer.nvidia.com/video-encode-and-decode-gpu-support-matrix-new")
+    return len(GPUs)
+
+class EncodingDevices:
+    NONE   = "None"
     CPU    = "CPU"
     QSV    = "Intel-QSV CPU"
     NVIDIA = "NVIDIA GPU"
 
-class Codec(_namedtuple("_Codec", ("name", "encoder", "suffix", "vcodec", "pix_fmt"))):
+    _availability = dict()
+
+    @classmethod
+    def available(cls, device):
+        device = str(device)
+        if device not in cls._availability.keys():
+            cls._availability[device] = cls.check_availability(device)
+        return cls._availability[device]
+
+    @classmethod
+    def check_availability(cls, device):
+        """explicitly check the availability of the device."""
+        device = str(device)
+        if device == cls.NONE:
+            return True
+        elif device == cls.CPU:
+            return True
+        elif device == cls.QSV:
+            # FIXME
+            _LOGGER.warning("the current version of the program cannot detect the availability of Intel QSV. the option is disabled.")
+            return False
+        elif device == cls.NVIDIA:
+            return (number_of_nvidia_gpus() > 0)
+        else:
+            _LOGGER.warning("unknown encoder device name: " + device)
+            return False
+
+class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pix_fmt"))):
     @property
     def description(self):
         return f"{self.label} (*{self.suffix})"
@@ -78,8 +151,8 @@ class Codec(_namedtuple("_Codec", ("name", "encoder", "suffix", "vcodec", "pix_f
     @property
     def label(self):
         ret = self.name
-        if self.encoder is not None:
-            ret += ", " + self.encoder + "-encoding"
+        if self.device != EncodingDevices.NONE:
+            ret += ", " + self.device + "-encoding"
         return ret
 
     def as_ffmpeg_command(self, outpath, descriptor, framerate=30):
@@ -87,7 +160,7 @@ class Codec(_namedtuple("_Codec", ("name", "encoder", "suffix", "vcodec", "pix_f
 
         ## FIXME: how shall we set e.g. the CRF value / bit rate?
         return [FFMPEG_PATH,] + BASE_OPTIONS \
-                + input_options(
+                + ffmpeg_input_options(
                     width=descriptor.width,
                     height=descriptor.height,
                     framerate=framerate,
@@ -105,23 +178,26 @@ class Codec(_namedtuple("_Codec", ("name", "encoder", "suffix", "vcodec", "pix_f
         return _sp.Popen(self.as_ffmpeg_command(outpath, descriptor, framerate),
                             stdin=_sp.PIPE)
 
+BASE_ENCODER_LIST = (
+    Encoder("Raw video", EncodingDevices.NONE,   ".avi", "rawvideo", "yuv420p"),
+    Encoder("MJPEG",     EncodingDevices.CPU,    ".avi", "mjpeg",    "yuvj420p"),
+    Encoder("MJPEG",     EncodingDevices.QSV,    ".avi", "mjpeg_qsv", "yuvj420p"),
+    Encoder("H.264",     EncodingDevices.NVIDIA, ".avi", "h264_nvenc", "yuv420p"),
+)
+
+### the main storage service
+
 class StorageService(_QtCore.QObject):
     EXPERIMENT_ATTRIBUTES = ("subject", "datestr", "indexstr", "domain", "appendagestr")
     TIMESTAMP_FORMAT      = "%H%M%S"
     DEFAULT_NAME_PATTERN  = "{subject}_{date}_{domain}_{time}{appendage}"
     DEFAULT_TIMEOUT       = 3.0
 
-    CODECS = (
-    # FIXME: better listing up only available ones (i.e. check availability upon initialization)
-        Codec("Raw video", Encoders.NONE,   ".avi", "rawvideo", "yuv420p"),
-        Codec("MJPEG",     Encoders.CPU,    ".avi", "mjpeg",    "yuvj420p"),
-        # Codec("MJPEG",     Encoders.QSV,    ".avi", "mjpeg_qsv", "yuvj420p"),
-        Codec("H.264",     Encoders.NVIDIA, ".avi", "h264_nvenc", "yuv420p"),
-    )
+    DEFAULT_ENCODERS = tuple(enc for enc in BASE_ENCODER_LIST if EncodingDevices.available(enc.device))
 
     _singleton = None
 
-    updatedCodec     = _QtCore.pyqtSignal(object) # a Codec object
+    updatedEncoder   = _QtCore.pyqtSignal(object) # an Encoder object
     updatedDirectory = _QtCore.pyqtSignal(str)
     updatedPattern   = _QtCore.pyqtSignal(str)
     updatedFileName  = _QtCore.pyqtSignal(str)
@@ -140,32 +216,33 @@ class StorageService(_QtCore.QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self._codec      = self.CODECS[0]
+        self._encoder    = self.DEFAULT_ENCODERS[0]
         self._directory  = str(_Path().resolve())
         self._pattern    = self.DEFAULT_NAME_PATTERN
 
         self._experiment = _Experiment.instance() # must be non-None
         self._experiment.updated.connect(self.updateFileName)
 
-        self._encoder    = None # the placeholder for the encoder process
+        self._proc       = None # the placeholder for the encoder process
         self._sink       = None # the STDIN of the encoder process
         self._nextindex  = None # the frame index being expected by the encoder (for detection of skips)
         self._empty      = None # the empty frame to be inserted in case of skips
         self._convert    = None # the function to make the frame into the proper structure
 
-    def getCodec(self):
-        return self._codec
+    def getEncoder(self):
+        return self._encoder
 
-    def setCodec(self, value):
+    def setEncoder(self, value):
         if isinstance(value, str):
-            for codec in self.list_codecs():
-                if codec.description == value:
-                    value = codec
+            for encoder in self.list_encoders():
+                if encoder.description == value:
+                    value = encoder
                     break
             if isinstance(value, str):
-                raise ValueError(f"codec not found: '{value}'")
-        self._codec = value
-        self.updatedCodec.emit(self._codec)
+                raise ValueError(f"encoder not found: '{value}'")
+        self._encoder = value
+        self.updatedEncoder.emit(self._encoder)
+        self.message.emit("info", f"video encoder: {self._encoder.description}")
         self.updateFileName()
 
     def getDirectory(self):
@@ -203,14 +280,14 @@ class StorageService(_QtCore.QObject):
     def as_path(self, filename):
         return _Path(self._directory) / filename
 
-    def list_codecs(self):
-        return self.CODECS
+    def list_encoders(self):
+        return self.DEFAULT_ENCODERS
 
     def prepare(self, framerate=30, descriptor=None):
-        self._encoder = self._codec.open_ffmpeg(self.as_path(self.filename),
-                                                descriptor=descriptor,
-                                                framerate=framerate)
-        self._sink      = self._encoder.stdin
+        self._proc = self._encoder.open_ffmpeg(self.as_path(self.filename),
+                                               descriptor=descriptor,
+                                               framerate=framerate)
+        self._sink      = self._proc.stdin
         self._nextindex = 0
         self._empty     = _np.zeros(**descriptor.numpy_formatter)
         if self._empty.ndim == 3:
@@ -227,8 +304,9 @@ class StorageService(_QtCore.QObject):
         self._nextindex += 1
 
     def close(self):
-        if self._encoder is not None:
-            proc = self._encoder
+        if self._proc is not None:
+            proc = self._proc
+            # 'safely' terminate the process
             try:
                 stdout, stderr = proc.communicate(timeout=self.DEFAULT_TIMEOUT)
             except TimeoutExpired:
@@ -238,16 +316,16 @@ class StorageService(_QtCore.QObject):
                 print(stdout.decode('utf-8'), file=_sys.stdout, flush=True)
             if stderr is not None:
                 print(stderr.decode('utf-8'), file=_sys.stderr, flush=True)
-            self._encoder = None
+            self._proc = None
             del proc
 
     def is_running(self):
         """returns whether the storage service is currently running the encoder process."""
-        return (self._encoder is not None)
+        return (self._proc is not None)
 
     @property
     def suffix(self):
-        return self._codec.suffix
+        return self._encoder.suffix
 
     @property
     def format_dict(self):
@@ -259,7 +337,7 @@ class StorageService(_QtCore.QObject):
         opts["suffix"] = self.suffix
         return opts
 
-    codec     = property(fget=getCodec,     fset=setCodec)
+    encoder   = property(fget=getEncoder,   fset=setEncoder)
     directory = property(fget=getDirectory, fset=setDirectory)
     pattern   = property(fget=getPattern,   fset=setPattern)
     filename  = property(fget=updateFileName)

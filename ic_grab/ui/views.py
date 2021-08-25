@@ -575,7 +575,7 @@ class StorageSettings(_utils.ViewGroup):
     FILE_DESC_NOGRAB = "Sample file name: "
     FILE_DESC_GRAB   = "File name: "
 
-    requestedCodecUpdate     = _QtCore.pyqtSignal(str)
+    requestedEncoderUpdate   = _QtCore.pyqtSignal(str)
     requestedDirectoryUpdate = _QtCore.pyqtSignal(str)
     requestedPatternUpdate   = _QtCore.pyqtSignal(str)
 
@@ -601,12 +601,12 @@ class StorageSettings(_utils.ViewGroup):
                                         ("updatedDirectory", "updateWithDirectory"),
                                         ("updatedPattern",   "updateWithPattern"),
                                         ("updatedFileName",  "updateWithFileName"),
-                                        ("updatedCodec",     "updateWithCodec"),
+                                        ("updatedEncoder",   "updateWithEncoder"),
                                     ),
                                     from_interface=(
-                                        ("requestedCodecUpdate", "setCodec"),
+                                        ("requestedEncoderUpdate",   "setEncoder"),
                                         ("requestedDirectoryUpdate", "setDirectory"),
-                                        ("requestedPatternUpdate", "setPattern"),
+                                        ("requestedPatternUpdate",   "setPattern"),
                                     )
                                )
         self._service = None
@@ -619,12 +619,12 @@ class StorageSettings(_utils.ViewGroup):
         self._pattern.widget.edited.connect(self._pattern.widget.invalidate)
         self._pattern.widget.editingFinished.connect(self.dispatchPatternUpdate)
         self._file    = _utils.FormItem(self.FILE_DESC_NOGRAB, _QtWidgets.QLabel(self._service.filename))
-        self._codec   = _utils.FormItem("Video format", _QtWidgets.QComboBox())
-        for codec in self._service.list_codecs():
-            self._codec.widget.addItem(codec.description)
-        self._codec.widget.setCurrentText(self._service.codec.description)
-        self._codec.widget.currentTextChanged.connect(self.dispatchCodecUpdate)
-        self._addFormItem(self._codec,     0, 0)
+        self._encoder = _utils.FormItem("Video format", _QtWidgets.QComboBox())
+        for encoder in self._service.list_encoders():
+            self._encoder.widget.addItem(encoder.description)
+        self._encoder.widget.setCurrentText(self._service.encoder.description)
+        self._encoder.widget.currentTextChanged.connect(self.dispatchCodecUpdate)
+        self._addFormItem(self._encoder,   0, 0)
         self._addFormItem(self._directory, 1, 0)
         self._addFormItem(self._pattern,   2, 0)
         self._addFormItem(self._file,      3, 0)
@@ -646,13 +646,13 @@ class StorageSettings(_utils.ViewGroup):
                 src.connect(dst)
 
     def setEnabled(self, state):
-        for obj in (self._directory, self._pattern, self._codec,):
+        for obj in (self._directory, self._pattern, self._encoder,):
             obj.setEnabled(state)
 
     def dispatchCodecUpdate(self, value):
         if self._updating == True:
             return
-        self.requestedCodecUpdate.emit(value)
+        self.requestedEncoderUpdate.emit(value)
 
     def dispatchDirectoryUpdate(self, value):
         if self._updating == True:
@@ -664,9 +664,9 @@ class StorageSettings(_utils.ViewGroup):
             return
         self.requestedPatternUpdate.emit(self._pattern.widget.text())
 
-    def updateWithCodec(self, codec):
+    def updateWithEncoder(self, codec):
         self._updating = True
-        self._codec.widget.setCurrentText(codec.description)
+        self._encoder.widget.setCurrentText(codec.description)
         self._updating = False
 
     def updateWithDirectory(self, value):
