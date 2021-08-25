@@ -245,7 +245,11 @@ class SelectionModel(DeviceSetting):
                 return self.DEFAULT_OPTIONS[0]
             else:
                 try:
-                    return self.getValueImpl()
+                    value = self.getValueImpl()
+                    if value not in self.options:
+                        return self.options[0]
+                    else:
+                        return value
                 except RuntimeError as e:
                     self.fireDriverError(e)
                     return self.options[0]

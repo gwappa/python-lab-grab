@@ -34,6 +34,11 @@ class AcquisitionSettings(_models.DeviceSetting):
         self._gain      = GainSetting(device=device, parent=self)
         self._strobe    = StrobeSetting(device=device, parent=self)
 
+        # enables this AcquisitionSettings object
+        # to 'raise' the message events from its children altogether
+        for _, component in self.items():
+            component.message.connect(self.handleMessageFromChild)
+
     def items(self):
         return (
             ("frame-format", self._format),
@@ -42,6 +47,9 @@ class AcquisitionSettings(_models.DeviceSetting):
             ("gain",         self._gain),
             ("strobe",       self._strobe),
         )
+
+    def handleMessageFromChild(self, level, content):
+        self.message.emit(level, content)
 
     # override
     def updateWithDeviceImpl(self, device):
@@ -111,6 +119,10 @@ class FrameRateSetting(_models.ValueModel):
     def setAutoImpl(self, status):
         try:
             self._device.triggered = not status
+            if status:
+                self.message.emit("info", "disabled external triggering")
+            else:
+                self.message.emit("info", "enabled external triggering")
         except AttributeError as e:
             self.message.emit("error", "Not supported: Triggering modes cannot be specified on this device.")
 
@@ -121,6 +133,7 @@ class FrameRateSetting(_models.ValueModel):
     # override
     def setValueImpl(self, value):
         self._device.frame_rate = float(value)
+        self.message.emit("info", f"frame rate: {self._device.frame_rate:.1f} Hz")
 
     # override
     def getRangeImpl(self):
@@ -144,6 +157,11 @@ class ExposureSetting(_models.ValueModel):
     # override
     def setAutoImpl(self, status):
         self._device.auto_exposure = status
+        try:
+            mode = "enabled" if self._device.auto_exposure else "disabled"
+        except RuntimeError:
+            mode = "enabled" if status else "disabled"
+        self.message.emit("info", mode + " " + self.AUTO_PARAMETER_LABEL)
 
     # override
     def getRangeImpl(self):
@@ -156,6 +174,7 @@ class ExposureSetting(_models.ValueModel):
     # override
     def setValueImpl(self, value):
         self._device.exposure_us = int(value)
+        self.message.emit("info", f"manual exposure setting: {self._device.exposure_us} us")
 
 class GainSetting(_models.ValueModel):
     PARAMETER_LABEL      = "gain"
@@ -174,6 +193,11 @@ class GainSetting(_models.ValueModel):
     # override
     def setAutoImpl(self, status):
         self._device.auto_gain = status
+        try:
+            mode = "enabled" if self._device.auto_exposure else "disabled"
+        except RuntimeError:
+            mode = "enabled" if status else "disabled"
+        self.message.emit("info", mode + " " + self.AUTO_PARAMETER_LABEL)
 
     # override
     def getRangeImpl(self):
@@ -187,6 +211,7 @@ class GainSetting(_models.ValueModel):
     # override
     def setValueImpl(self, value):
         self._device.gain = float(value)
+        self.message.emit("info", f"manual gain setting: {self._device.gain:.1f}")
 
 class StrobeSetting(_models.SelectionModel):
     PARAMETER_LABEL  = "strobe setting"
@@ -209,6 +234,7 @@ class StrobeSetting(_models.SelectionModel):
     # override
     def setValueImpl(self, value):
         self._value = value
+        self.message.emit("info", "strobe mode: " + str(value))
 
 class FrameFormatSetting(_models.SelectionModel):
     PARAMETER_LABEL  = "frame format"
@@ -234,3 +260,4 @@ class FrameFormatSetting(_models.SelectionModel):
         value = str(value)
         self._device.video_format = value
         self._value = value
+        self.message.emit("info", "frame format: " + value)
