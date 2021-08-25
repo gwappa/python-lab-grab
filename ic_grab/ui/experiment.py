@@ -57,6 +57,27 @@ class Experiment(_QtCore.QObject):
         self._domain  = self.DEFAULT_DOMAIN
         self._append  = ""
 
+    def as_dict(self):
+        out = {}
+        out["subject"] = self.subject
+        out["date"]    = self.date.strftime(self.date_format)
+        out["index"]   = self.index
+        out["domain"]  = self.domain
+        out["append"]  = self.appendage
+        return out
+
+    def load_dict(self, cfg):
+        if "subject" in cfg.keys():
+            self.subject = cfg["subject"]
+        if "date" in cfg.keys():
+            self.date = _datetime.strptime(cfg["date"], self.date_format)
+        if "index" in cfg.keys():
+            self.index = cfg["index"]
+        if "domain" in cfg.keys():
+            self.domain = cfg["domain"]
+        if "append" in cfg.keys():
+            self.appendage = cfg["append"]
+
     def getSubject(self):
         return self._subject
 
@@ -122,13 +143,6 @@ class Experiment(_QtCore.QObject):
     @property
     def qDate_format(self):
         return "yyyy-MM-dd"
-
-    @property
-    def appendagestr(self):
-        if len(self._append) == 0:
-            return ""
-        else:
-            return "_" + self._append
 
     @property
     def datestr(self):

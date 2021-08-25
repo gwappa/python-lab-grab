@@ -229,6 +229,18 @@ class StorageService(_QtCore.QObject):
         self._empty      = None # the empty frame to be inserted in case of skips
         self._convert    = None # the function to make the frame into the proper structure
 
+    def as_dict(self):
+        out = {}
+        out["directory"] = self._directory
+        out["pattern"]   = self._pattern
+        out["encoder"]   = self._encoder.description
+        return out
+
+    def load_dict(self, cfg):
+        for key in ("directory", "pattern", "encoder"):
+            if key in cfg.keys():
+                setattr(self, key, cfg[key])
+
     def getEncoder(self):
         return self._encoder
 
