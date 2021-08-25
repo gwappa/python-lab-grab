@@ -45,7 +45,7 @@ class AcquisitionSettings(_models.DeviceSetting):
 
     # override
     def updateWithDeviceImpl(self, device):
-        for obj in (self._format, self._framerate, self._exposure, self._gain, self._strobe):
+        for _, obj in self.items():
             obj.updateWithDevice(device)
 
     # override
