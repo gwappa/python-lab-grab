@@ -176,6 +176,13 @@ class StorageService(_QtCore.QObject):
         self.updatedDirectory.emit(self._directory)
         self.message.emit("info", f"save directory: {self._directory}")
 
+    def openDirectory(self):
+        """opens the directory on Explorer"""
+        proc = _sp.run(["start", self._directory], shell=True)
+        if proc.returncode != 0:
+            # TODO: generate warning
+            _LOGGER.warning("failed to open: " + self._directory)
+
     def getPattern(self):
         return self._pattern
 

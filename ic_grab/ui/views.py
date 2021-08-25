@@ -614,6 +614,7 @@ class StorageSettings(_utils.ViewGroup):
 
         self._directory = _utils.FormItem("Directory", DirectorySelector(self._service.directory))
         self._directory.widget.directorySelected.connect(self.dispatchDirectoryUpdate)
+        self._directory.widget.requestedOpeningDirectory.connect(self._service.openDirectory)
         self._pattern = _utils.FormItem("File name pattern", _utils.InvalidatableLineEdit(self.service.pattern))
         self._pattern.widget.edited.connect(self._pattern.widget.invalidate)
         self._pattern.widget.editingFinished.connect(self.dispatchPatternUpdate)
@@ -710,6 +711,7 @@ class StorageSettings(_utils.ViewGroup):
 
 class DirectorySelector(_QtWidgets.QWidget):
     directorySelected = _QtCore.pyqtSignal(str)
+    requestedOpeningDirectory = _QtCore.pyqtSignal()
 
     def __init__(self, path="", parent=None):
         path = str(_Path(path).resolve())
@@ -722,15 +724,19 @@ class DirectorySelector(_QtWidgets.QWidget):
         self._chooser.setWindowTitle("Directory to save videos")
         self._chooser.accepted.connect(self.updateFromChooser)
         self._disp   = _QtWidgets.QLabel(path)
-        self._search = _QtWidgets.QPushButton("Search...")
+        self._open   = _QtWidgets.QPushButton("Open")
+        self._open.clicked.connect(self.showDirectoryOnExplorer)
+        self._search = _QtWidgets.QPushButton("Select...")
         self._search.clicked.connect(self.startEditing)
 
         self._layout = _QtWidgets.QGridLayout()
         self.setLayout(self._layout)
         self._layout.addWidget(self._disp, 0, 0)
-        self._layout.addWidget(self._search, 0, 1)
+        self._layout.addWidget(self._open, 0, 1)
+        self._layout.addWidget(self._search, 0, 2)
         self._layout.setColumnStretch(0, 5)
         self._layout.setColumnStretch(1, 1)
+        self._layout.setColumnStretch(2, 1)
 
         self._from_chooser = False # updating from the file dialog
 
@@ -751,6 +757,9 @@ class DirectorySelector(_QtWidgets.QWidget):
         path = _Path(self._disp.text())
         # FIXME: cannot pre-specify the selected directory!
         self._chooser.show()
+
+    def showDirectoryOnExplorer(self):
+        self.requestedOpeningDirectory.emit()
 
     def updateFromChooser(self):
         self._from_chooser = True
