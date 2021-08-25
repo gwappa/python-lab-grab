@@ -20,16 +20,95 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from pathlib import Path as _Path
+from datetime import datetime as _datetime
+import json as _json
+
+from .. import LOGGER as _LOGGER
+
 try:
     from pyqtgraph.Qt import QtCore as _QtCore, \
                              QtGui as _QtGui, \
                              QtWidgets as _QtWidgets
-    from .. import LOGGER as _LOGGER
 
     APP = _QtGui.QApplication([])
 
     def run():
         APP.exec()
+
+    class SessionManager(_QtCore.QObject):
+        """manages the non-graphical state of the app."""
+        message = _QtCore.pyqtSignal(str, str)
+
+        def __init__(self, parent=None):
+            super().__init__(parent=parent)
+            self._experiment  = experiment.Experiment.instance()
+            self._control     = control.DeviceControl()
+            self._acquisition = acquisition.AcquisitionSettings()
+            self._storage     = storage.StorageService.instance()
+
+            for _, component in self.items():
+                component.message.connect(self.handleMessageFromChild)
+            self.message.connect(self.log)
+
+            # TODO: connect components with each other
+
+        def items(self):
+            return (
+                ("experiment",  self._experiment),
+                (None,          self._control),
+                ("acquisition", self._acquisition),
+                ("storage",     self._storage),
+            )
+
+        def log(self, level, content):
+            getattr(_LOGGER, level)(content)
+
+        def handleMessageFromChild(self, level, content):
+            self.message.emit(level, content)
+
+        def as_dict(self):
+            out = dict(timestamp=str(_datetime.now()))
+            for key, component in self.items():
+                if not key:
+                    # not saved
+                    continue
+                out[key] = component.as_dict()
+            return out
+
+        def load_dict(self, cfg):
+            for key, component in self.items():
+                if (not key) or (key not in cfg.keys()):
+                    continue
+                component.load_dict(cfg[key])
+
+        def save(self, path):
+            path = _Path(path)
+            with open(path, "w") as out:
+                _json.dump(self.as_dict(), out, indent=4)
+            self.message.emit("info", f"saved settings to: {path.name}")
+
+        def load(self, path):
+            path = _Path(path)
+            with open(path, "r") as src:
+                self.load_dict(_json.load(src))
+            self.message.emit("info", f"loaded settings from: {path.name}")
+
+        @property
+        def experiment(self):
+            return self._experiment
+
+        @property
+        def control(self):
+            return self._control
+
+        @property
+        def acquisition(self):
+            return self._acquisition
+
+        @property
+        def storage(self):
+            return self._storage
 
     class MainWindow(_QtWidgets.QMainWindow):
         DEFAULT_TITLE    = "IC-GRAB"
@@ -92,11 +171,12 @@ try:
             else:
                 _LOGGER.warning(f"MainWindow has not been set up for handling the '{level}' log level.")
 
-    from . import device
+    from . import control
+    from . import experiment
+    from . import acquisition
+    from . import storage
     from . import views
     from . import commands
-    from . import experiment
-    from . import storage
 
 except ImportError:
     raise RuntimeError("an error occurred while attempting to import 'pyqtgraph'. install it, or fix the installation.")
