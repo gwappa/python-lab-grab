@@ -54,7 +54,7 @@ BASE_OPTIONS = [
     "-y", # overwrite by default
 ]
 if FFMPEG_PATH is not None:
-    _LOGGER.info(f"found 'ffmpeg' at: {FFMPEG_PATH}")
+    _LOGGER.debug(f"found 'ffmpeg' at: {FFMPEG_PATH}")
 
 def ffmpeg_input_options(width, height, framerate, pixel_format="rgb24"):
     return [
@@ -91,7 +91,7 @@ def number_of_nvidia_gpus():
         _LOGGER.warning("failed to parse the driver version from 'nvidia-smi'")
         return 0
     major, minor = [int(digits) for digits in version.split(".")]
-    _LOGGER.info(f"NVIDIA driver version: {version} (major={major}, minor={minor})")
+    _LOGGER.debug(f"NVIDIA driver version: {version} (major={major}, minor={minor})")
     if major < 450:
         _LOGGER.warning("NVIDIA driver must be newer than 450.xx: please update via https://www.nvidia.com/Download/driverResults.aspx/176854/en-us")
         return 0

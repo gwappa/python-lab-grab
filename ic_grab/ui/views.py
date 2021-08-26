@@ -632,6 +632,7 @@ class DirectorySelector(_QtWidgets.QWidget):
         self._chooser = _QtWidgets.QFileDialog(self, _QtCore.Qt.Dialog)
         self._chooser.setAcceptMode(_QtWidgets.QFileDialog.AcceptOpen)
         self._chooser.setFileMode(_QtWidgets.QFileDialog.Directory)
+        self._chooser.setOptions(_QtWidgets.QFileDialog.ReadOnly)
         self._chooser.setModal(True)
         self._chooser.setWindowTitle("Directory to save videos")
         self._chooser.accepted.connect(self.updateFromChooser)
@@ -660,6 +661,7 @@ class DirectorySelector(_QtWidgets.QWidget):
     def value(self, val):
         path = _Path(str(val)).resolve()
         self._disp.setText(str(path))
+        self._chooser.setDirectory(str(path.parent))
         if self._from_chooser == True:
             self.directorySelected.emit(str(path))
 

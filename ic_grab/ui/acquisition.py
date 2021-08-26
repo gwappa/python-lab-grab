@@ -69,10 +69,12 @@ class AcquisitionSettings(_models.DeviceSetting):
     def load_dict(self, cfg):
         device_name = cfg.get("device", None)
         if device_name is not None:
-            if self._device.unique_name != device_name:
-                self.message.emit("warning", "Different device: A different device name is specified in the config. Configuration procedures may not work as being specified.")
+            if self._device is None:
+                self.message.emit("warning", "Device not open: Most acquisition settings will not be loaded properly.")
+            elif self._device.unique_name != device_name:
+                self.message.emit("warning", "Different device: A different device name is specified in the settings. Configuration procedures may not work properly.")
         else:
-            self.message.emit("warning", "Generic configuration: the device name is not specified in the config. Configuration procedures may not work as being specified.")
+            self.message.emit("warning", "Device unspecified: the device name is not specified in the settings. Configuration procedures may not work properly.")
 
         for key, component in self.items():
             if not key in cfg.keys():
@@ -110,6 +112,22 @@ class FrameRateSetting(_models.ValueModel):
 
     def __init__(self, device=None, preferred=None, parent=None):
         super().__init__(device=device, preferred=preferred, parent=parent)
+
+    # override
+    def as_dict(self):
+        out = dict(auto=self.auto)
+        if self.auto == True:
+            out["value"] = self.value
+        elif self._preferred is not None:
+            out["value"] = self._preferred
+        return out
+
+    # override
+    def load_dict(self, cfg):
+        if "auto" in cfg.keys():
+            self.auto = cfg["auto"]
+        if "value" in cfg.keys():
+            self.preferred = cfg["value"]
 
     # override
     def isAutoImpl(self):

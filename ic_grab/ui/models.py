@@ -44,11 +44,11 @@ class DeviceSetting(_QtCore.QObject):
 
     def as_dict(self):
         """supposed to return its setting as a dict object."""
-        raise NotImplementedError("as_dict")
+        raise NotImplementedError(f"{self.__class__.__name__}.as_dict")
 
     def load_dict(self, cfg):
         """supposed to configure this setting object based on the given dict object (non-None)."""
-        raise NotImplementedError("load_dict")
+        raise NotImplementedError(f"{self.__class__.__name__}.load_dict")
 
     device = property(fget=getCurrentDevice, fset=updateWithDevice)
 
@@ -96,6 +96,22 @@ class ValueModel(DeviceSetting):
     def __init__(self, device=None, preferred=None, parent=None):
         super().__init__(device=device, parent=parent)
         self._preferred = preferred
+
+    def as_dict(self):
+        out = {}
+        if self.auto == True:
+            out["auto"] = True
+            return out
+        else:
+            out["auto"]      = False
+            out["preferred"] = self.preferred
+            out["value"]     = self.value
+            return out
+
+    def load_dict(self, cfg):
+        self.auto = cfg["auto"]
+        if "preferred" in cfg.keys():
+            self.preferred = cfg["preferred"]
 
     # override
     def updateWithDeviceImpl(self, device):
@@ -212,6 +228,13 @@ class SelectionModel(DeviceSetting):
 
     def __init__(self, device=None, parent=None):
         super().__init__(device=device, parent=parent)
+
+    def as_dict(self):
+        return dict(value=self.value)
+
+    def load_dict(self, cfg):
+        if "value" in cfg.keys():
+            self.value = cfg["value"]
 
     # override
     def updateWithDeviceImpl(self, device):

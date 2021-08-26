@@ -73,17 +73,23 @@ try:
         def as_dict(self):
             out = dict(timestamp=str(_datetime.now()))
             for key, component in self.items():
-                if not key:
+                if key is None:
                     # not saved
                     continue
                 out[key] = component.as_dict()
             return out
 
         def load_dict(self, cfg):
+            if ("acquisition" in cfg.keys()) and ("device" in cfg["acquisition"].keys()):
+                self.control.openDevice(cfg["acquisition"]["device"])
+
             for key, component in self.items():
                 if (not key) or (key not in cfg.keys()):
                     continue
-                component.load_dict(cfg[key])
+                try:
+                    component.load_dict(cfg[key])
+                except:
+                    pass
 
         def save(self, path):
             path = _Path(path)

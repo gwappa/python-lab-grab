@@ -20,11 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from pathlib import Path as _Path
+from datetime import datetime as _datetime
+
 from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
-
-import tisgrabber as _tisgrabber
 
 from . import utils as _utils
 from .. import LOGGER as _LOGGER
@@ -71,13 +72,83 @@ class CommandButton(_QtWidgets.QPushButton, _utils.SessionControl):
     def dispatchRequest(self):
         pass
 
-class SaveConfigButton(CommandButton):
-    def __init__(self, session, label="Save...", parent=None):
-        super().__init__(label, session, parent=parent)
+class PreferenceButton(CommandButton):
+    LABEL = "Preference..."
 
-class LoadConfigButton(CommandButton):
-    def __init__(self, session, label="Load...", parent=None):
+    def __init__(self, session, label=None, parent=None):
+        if label is None:
+            label = self.LABEL
         super().__init__(label, session, parent=parent)
+        self._dialog = _QtWidgets.QFileDialog(self, _QtCore.Qt.Dialog)
+        self._dialog.setDirectory(str(_Path().resolve()))
+        self._dialog.setMimeTypeFilters(["application/json"])
+        # self._dialog.setAcceptMode(_QtWidgets.QFileDialog.AcceptOpen)
+        # self._dialog.setFileMode(_QtWidgets.QFileDialog.Directory)
+        self._dialog.setModal(True)
+        self._dialog.setWindowTitle(label.replace("...", " settings..."))
+        self._dialog.accepted.connect(self.updateFromDialog)
+        self.setEnabled(True)
+
+    def updateFromDialog(self):
+        pass
+
+    # override
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+
+    # override
+    def dispatchRequest(self):
+        # somehow _dialog.exec() (or any other static methods to show a modal dialog)
+        # does not work. So I chose to explicitly show() a modal dialog here
+        self.dialog.show()
+
+    @property
+    def dialog(self):
+        return self._dialog
+
+class SaveConfigButton(PreferenceButton):
+    LABEL = "Save..."
+    FILENAME_FORMAT = "settings_%Y-%m-%d-%H%M%S.json"
+
+    requestedSave = _QtCore.pyqtSignal(str)
+
+    def __init__(self, session, label=None, parent=None):
+        super().__init__(session, label=label, parent=parent)
+        self._dialog.setAcceptMode(_QtWidgets.QFileDialog.AcceptSave)
+
+    # override
+    def connectWithSession(self, session):
+        super().connectWithSession(session)
+        self.requestedSave.connect(session.save)
+
+    # override
+    def dispatchRequest(self):
+        self.dialog.selectFile(_datetime.now().strftime(self.FILENAME_FORMAT))
+        self.dialog.show()
+
+    # override
+    def updateFromDialog(self):
+        self.requestedSave.emit(self.dialog.selectedFiles()[0])
+
+class LoadConfigButton(PreferenceButton):
+    LABEL = "Load..."
+
+    requestedLoad = _QtCore.pyqtSignal(str)
+
+    def __init__(self, session, label=None, parent=None):
+        super().__init__(session, label=label, parent=parent)
+        self._dialog.setAcceptMode(_QtWidgets.QFileDialog.AcceptOpen)
+        self._dialog.setFileMode(_QtWidgets.QFileDialog.ExistingFile)
+        self._dialog.setOptions(_QtWidgets.QFileDialog.ReadOnly)
+
+    # override
+    def connectWithSession(self, session):
+        super().connectWithSession(session)
+        self.requestedLoad.connect(session.load)
+
+    # override
+    def updateFromDialog(self):
+        self.requestedLoad.emit(self.dialog.selectedFiles()[0])
 
 class AcquireButton(CommandButton):
     LABEL_START = _utils.AcquisitionModes.IDLE
