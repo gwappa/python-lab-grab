@@ -113,7 +113,7 @@ class ValueModel(DeviceSetting):
         self.rangeChanged.emit(m, M)
 
     def isAuto(self):
-        if self._device:
+        if self._device is not None:
             try:
                 return self.isAutoImpl()
             except RuntimeError as e:
@@ -132,7 +132,7 @@ class ValueModel(DeviceSetting):
             self.fireDriverError(e)
 
     def getPreferred(self):
-        if not self._preferred:
+        if self._preferred is not None:
             return self.getValueImpl()
         else:
             return self._preferred
@@ -141,7 +141,7 @@ class ValueModel(DeviceSetting):
         """the underlying setPreferredImpl() may or may not update the actual value,
         depending on the mode of the device."""
         self._preferred = value
-        if self._device:
+        if self._device is not None:
             try:
                 m, M = self.getRange()
                 if m > value:
@@ -157,7 +157,7 @@ class ValueModel(DeviceSetting):
 
     def getValue(self):
         """returns the current (actual, manual) value."""
-        if not self._device:
+        if self._device is None:
             return self.DEFAULT_VALUE
         else:
             try:
@@ -168,18 +168,13 @@ class ValueModel(DeviceSetting):
 
     def getRange(self):
         """returns (min, max) for the manual settings."""
-        if not self._device:
+        if self._device is None:
             return self.DEFAULT_RANGE
         try:
             return self.getRangeImpl()
         except RuntimeError as e:
             self.fireDriverError(e)
             return self.DEFAULT_RANGE
-
-    auto      = property(fget=isAuto, fset=setAuto)
-    preferred = property(fget=getPreferred, fset=setPreferred)
-    value     = property(fget=getValue)
-    range     = property(fget=getRange)
 
     def isAutoImpl(self):
         """it can be assumed that the device be non-None."""
@@ -201,6 +196,11 @@ class ValueModel(DeviceSetting):
         """it can be assumed that the device be non-None, and 'value' be within the range as given by getRangeImpl()."""
         raise NotImplementedError("setValueImpl")
 
+    auto      = property(fget=isAuto, fset=setAuto)
+    value     = property(fget=getValue)
+    range     = property(fget=getRange)
+    preferred = property(fget=getPreferred, fset=setPreferred)
+
 class SelectionModel(DeviceSetting):
     PARAMETER_LABEL  = None
     READ_FROM_DEVICE = False
@@ -215,7 +215,7 @@ class SelectionModel(DeviceSetting):
 
     # override
     def updateWithDeviceImpl(self, device):
-        if (device is not None) and self.READ_FROM_DEVICE:
+        if (device is not None) and (self.READ_FROM_DEVICE == True):
             self.fireOptionsChanged()
             self.fireSelectionChanged()
 
@@ -258,7 +258,7 @@ class SelectionModel(DeviceSetting):
 
     def setValue(self, value):
         if value not in self.options:
-            self.message.emit("error", f"Unexpected option: Unexpected option for {self.PARAMETER_LABEL}': {value}'")
+            self.message.emit("error", f"Unexpected option: Unexpected option for {self.PARAMETER_LABEL}: '{value}'")
             return
         if self.READ_FROM_DEVICE:
             if self._device is None:

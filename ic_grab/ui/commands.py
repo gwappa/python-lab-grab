@@ -30,52 +30,54 @@ from . import utils as _utils
 from .. import LOGGER as _LOGGER
 
 class CommandBar(_QtWidgets.QWidget):
-    def __init__(self, controller=None, parent=None):
+    def __init__(self, session=None, parent=None):
         super().__init__(parent=parent)
         self._layout = _QtWidgets.QHBoxLayout()
         self.setLayout(self._layout)
-        self._save   = SaveConfigButton(controller=controller)
-        self._load   = LoadConfigButton(controller=controller)
-        self._focus  = FocusButton(controller=controller)
-        self._grab   = GrabButton(controller=controller)
+        self._save   = SaveConfigButton(session)
+        self._load   = LoadConfigButton(session)
+        self._focus  = FocusButton(session)
+        self._grab   = GrabButton(session)
         self._layout.addWidget(self._load)
         self._layout.addWidget(self._save)
         self._layout.addStretch(-1)
         self._layout.addWidget(self._focus)
         self._layout.addWidget(self._grab)
 
-class CommandButton(_QtWidgets.QPushButton, _utils.ControllerInterface):
-    def __init__(self, label, controller=None, parent=None,
+class CommandButton(_QtWidgets.QPushButton, _utils.SessionControl):
+    def __init__(self, label, session, parent=None,
                  connections=dict(from_controller=(), from_interface=())):
         _QtWidgets.QPushButton.__init__(self, label, parent=parent)
         self.setEnabled(False)
-        _utils.ControllerInterface.__init__(self,
-                                            controller=controller,
-                                            connections=connections)
+        _utils.SessionControl.__init__(self)
+        self.initWithSession(session)
+        self.clicked.connect(self.dispatchRequest)
+
+    # override
+    def connectWithSession(self, session):
+        session.control.openedDevice.connect(self.updateWithOpeningDevice)
+        session.control.closedDevice.connect(self.updateWithClosingDevice)
+        session.control.updatedAcquisitionMode.connect(self.updateWithAcquisitionMode)
+
+    def updateWithOpeningDevice(self, device):
+        pass
+
+    def updateWithClosingDevice(self):
+        pass
+
+    def updateWithAcquisitionMode(self, oldmode, newmode):
+        pass
+
+    def dispatchRequest(self):
+        pass
 
 class SaveConfigButton(CommandButton):
-    def __init__(self, label="Save...", controller=None, parent=None):
-        super().__init__(label, controller=controller, parent=parent,
-                         connections=dict(
-                            from_controller=(
-
-                            ),
-                            from_interface=(
-
-                            )
-                         ))
+    def __init__(self, session, label="Save...", parent=None):
+        super().__init__(label, session, parent=parent)
 
 class LoadConfigButton(CommandButton):
-    def __init__(self, label="Load...", controller=None, parent=None):
-        super().__init__(label, controller=controller, parent=parent,
-                         connections=dict(
-                            from_controller=(
-
-                            ),
-                            from_interface=(
-
-                            )
-                         ))
+    def __init__(self, session, label="Load...", parent=None):
+        super().__init__(label, session, parent=parent)
 
 class AcquireButton(CommandButton):
     LABEL_START = _utils.AcquisitionModes.IDLE
@@ -83,31 +85,29 @@ class AcquireButton(CommandButton):
 
     requestedAcquisitionMode = _QtCore.pyqtSignal(str)
 
-    def __init__(self, label=None, controller=None, parent=None):
+    def __init__(self, session, label=None, parent=None):
         if label is None:
             label = self.LABEL_START
-        super().__init__(label, controller=controller, parent=parent,
-                         connections=dict(
-                            from_controller=(
-                                ("openedDevice", "updateWithOpeningDevice"),
-                                ("closedDevice", "updateWithClosingDevice"),
-                                ("updatedAcquisitionMode", "updateWithAcquisitionMode"),
-                            ),
-                            from_interface=(
-                                ("requestedAcquisitionMode", "setAcquisitionMode"),
-                            )
-                         ))
-        self.clicked.connect(self.dispatchRequest)
+        super().__init__(label, session, parent=parent)
 
+    # override
+    def connectWithSession(self, session):
+        super().connectWithSession(session)
+        self.requestedAcquisitionMode.connect(session.control.setAcquisitionMode)
+
+    # override
     def updateWithOpeningDevice(self, device):
         self.setEnabled(True)
 
+    # override
     def updateWithClosingDevice(self):
         self.setEnabled(False)
 
+    # override
     def dispatchRequest(self):
         self.requestedAcquisitionMode.emit(self.text())
 
+    # override
     def updateWithAcquisitionMode(self, oldmode, newmode):
         if oldmode == self.LABEL_START:
             # has been in the acquisition started by the command for this button
@@ -140,11 +140,11 @@ class AcquireButton(CommandButton):
 class FocusButton(AcquireButton):
     LABEL_START = _utils.AcquisitionModes.FOCUS
 
-    def __init__(self, label=None, controller=None, parent=None):
-        super().__init__(label=label, controller=controller, parent=parent)
+    def __init__(self, session, label=None, parent=None):
+        super().__init__(session, label=label, parent=parent)
 
 class GrabButton(AcquireButton):
     LABEL_START = _utils.AcquisitionModes.GRAB
 
-    def __init__(self, label=None, controller=None, parent=None):
-        super().__init__(label=label, controller=controller, parent=parent)
+    def __init__(self, session, label=None, parent=None):
+        super().__init__(session, label=label, parent=parent)

@@ -33,28 +33,24 @@ import tisgrabber as _tisgrabber
 from . import utils as _utils
 from .. import LOGGER as _LOGGER
 
-class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
+class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
     INITIAL_DIMS   = (640, 480)
     DEFAULT_COLOR  = (255, 255, 255, 255)
 
-    def __init__(self, controller=None, parent=None):
-        _QtWidgets.QGraphicsView.__init__(self, parent=parent)
+    def __init__(self, session=None, parent=None):
+        super().__init__(parent=parent)
+        self.initWithSession(session)
         self._scene   = _QtWidgets.QGraphicsScene()
         self._image   = _pg.ImageItem()
         self._scene.addItem(self._image)
         self._scene.setSceneRect(_QtCore.QRectF(0, 0, *self.INITIAL_DIMS))
         self.setScene(self._scene)
-        _utils.ControllerInterface.__init__(self, controller=controller,
-                                            connections=dict(
-                                                from_controller=(
-                                                    ("updatedFormat", "updateWithFormat"),
-                                                    ("acquisitionReady", "prepareForAcquisition"),
-                                                    ("frameReady", "updateWithFrame"),
-                                                ),
-                                                from_interface=(
 
-                                                )
-                                            ))
+    # override
+    def connectWithSession(self, session):
+        session.acquisition.format.selectionChanged.connect(self.updateWithFormat)
+        session.control.acquisitionReady.connect(self.prepareForAcquisition)
+        session.control.frameReady.connect(self.updateWithFrame)
 
     def updateWithFormat(self, format_name):
         ## TODO: merge with prepareForAcquisition()??
@@ -66,7 +62,7 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.ControllerInterface):
         self._image.setImage(_np.zeros(dims, dtype=_np.uint8))
         # TODO: set transform to fit the image to the rect
 
-    def prepareForAcquisition(self, rate, desc, store_frames=None):
+    def prepareForAcquisition(self, desc, store_frames=None):
         dims = desc.shape
         self._scene.setSceneRect(_QtCore.QRectF(0.0, 0.0, float(dims[1]), float(dims[0])))
         self._image.setImage(_np.zeros(dims, dtype=desc.dtype))
@@ -82,10 +78,8 @@ class ExperimentSettings(_utils.ViewGroup):
     requestIndexUpdate     = _QtCore.pyqtSignal(int)
     requestAppendageUpdate = _QtCore.pyqtSignal(str)
 
-    def __init__(self, session,
-                 title="Experiment",
-                 parent=None):
-        super().__init__(session, title=title, parent=parent)
+    def __init__(self, session, title="Experiment", parent=None):
+        super().__init__(title=title, parent=parent, session=session)
 
         self._subject = _utils.FormItem("Subject", _utils.InvalidatableLineEdit(self.subject))
         self._date    = _utils.FormItem("Date", _QtWidgets.QDateEdit(self.date))
@@ -226,7 +220,7 @@ class DeviceSelector(_utils.ViewGroup):
                  session,
                  title="Device",
                  parent=None):
-        super().__init__(session, title=title, parent=parent)
+        super().__init__(session=session, title=title, parent=parent)
         self._box    = _QtWidgets.QComboBox()
         for device in self.session.control.get_device_names():
             self._box.addItem(device)
@@ -239,12 +233,12 @@ class DeviceSelector(_utils.ViewGroup):
 
     # override
     def connectWithSession(self, session):
-        session.control.openedDevice.connect(self.updatedWithOpeningDevice)
+        session.control.openedDevice.connect(self.updateWithOpeningDevice)
         session.control.closedDevice.connect(self.updateWithClosingDevice)
         session.control.updatedAcquisitionMode.connect(self.updateWithAcquisitionMode)
 
-        self.requestedOpeningDevice.connect(self.control.openDevice)
-        self.requestedClosingDevice.connect(self.control.closeDevice)
+        self.requestedOpeningDevice.connect(session.control.openDevice)
+        self.requestedClosingDevice.connect(session.control.closeDevice)
 
     def dispatchRequest(self):
         cmd = self._action.text()
@@ -268,10 +262,8 @@ class DeviceSelector(_utils.ViewGroup):
 class FrameFormatSettings(_utils.ViewGroup):
     requestedFormatUpdate = _QtCore.pyqtSignal(str)
 
-    def __init__(self, session,
-                 title="Frame",
-                 parent=None):
-        super().__init__(session, title=title, parent=parent)
+    def __init__(self, session, title="Frame", parent=None):
+        super().__init__(session=session, title=title, parent=parent)
         self._format = _utils.FormItem("Format", _QtWidgets.QComboBox())
         self._x      = _utils.FormItem("Offset X", _QtWidgets.QSpinBox())
         self._y      = _utils.FormItem("Offset Y", _QtWidgets.QSpinBox())
@@ -335,10 +327,8 @@ class AcquisitionSettings(_utils.ViewGroup):
     requestedAutoGainMode     = _QtCore.pyqtSignal(bool)
     requestedGainUpdate       = _QtCore.pyqtSignal(object) # float
 
-    def __init__(self, session,
-                 title="Acquisition",
-                 parent=None):
-        super().__init__(session, title=title, parent=parent)
+    def __init__(self, session, title="Acquisition", parent=None):
+        super().__init__(session=session, title=title, parent=parent)
         self._rate = _utils.FormItem("Frame rate (Hz)", _utils.InvalidatableDoubleSpinBox())
         # set up the spin box
         self._rate.widget.setDecimals(1)
@@ -452,7 +442,7 @@ class AcquisitionSettings(_utils.ViewGroup):
 
     def updateWithOpeningDevice(self, device):
         self._updating = True
-            self.setEnabled(True)
+        self.setEnabled(True)
         self._rate.widget.setValue(device.frame_rate)
         self._triggered.setEnabled(device.has_trigger)
         self._exposure.widget.setValue(device.exposure_us)
@@ -515,9 +505,9 @@ class StrobeModeSelector(_QtWidgets.QComboBox, _utils.SessionControl):
     requestStrobeModeUpdate = _QtCore.pyqtSignal(str)
 
     def __init__(self, session, parent=None):
-        _QtWidgets.QComboBox.__init__(self, parent=parent)
+        super().__init__(parent=parent)
+        self.initWithSession(session)
         self.currentTextChanged.connect(self.dispatchStrobeModeUpdate)
-        _utils.SessionControl.__init__(self, session)
 
     # override
     def connectWithSession(self, session):
@@ -547,7 +537,7 @@ class StorageSettings(_utils.ViewGroup):
     requestedPatternUpdate   = _QtCore.pyqtSignal(str)
 
     def __init__(self, session, title="Storage", parent=None):
-        super().__init__(session, title=title, parent=parent)
+        super().__init__(session=session, title=title, parent=parent)
 
         self._directory = _utils.FormItem("Directory", DirectorySelector(self.session.storage.directory))
         self._directory.widget.directorySelected.connect(self.dispatchDirectoryUpdate)

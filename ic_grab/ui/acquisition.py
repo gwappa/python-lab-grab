@@ -147,7 +147,7 @@ class ExposureSetting(_models.ValueModel):
     DEFAULT_AUTO         = False
     DEFAULT_VALUE        = 33000 # 33 ms, for 30 Hz acquisition
 
-    def __init__(self, device=None, preferred=preferred, parent=None):
+    def __init__(self, device=None, preferred=None, parent=None):
         super().__init__(device=device, preferred=preferred, parent=parent)
 
     # override
@@ -169,7 +169,7 @@ class ExposureSetting(_models.ValueModel):
 
     # override
     def getValueImpl(self):
-        return self.exposure_us
+        return self._device.exposure_us
 
     # override
     def setValueImpl(self, value):
@@ -183,7 +183,7 @@ class GainSetting(_models.ValueModel):
     DEFAULT_AUTO         = False
     DEFAULT_VALUE        = 1
 
-    def __init__(self, device=None, preferred=preferred, parent=None):
+    def __init__(self, device=None, preferred=None, parent=None):
         super().__init__(device=device, preferred=preferred, parent=parent)
 
     # override
@@ -206,7 +206,7 @@ class GainSetting(_models.ValueModel):
 
     # override
     def getValueImpl(self):
-        return self.gain
+        return self._device.gain
 
     # override
     def setValueImpl(self, value):

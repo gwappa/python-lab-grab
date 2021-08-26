@@ -162,7 +162,7 @@ class ControllerInterface:
         pass
 
 class SessionControl:
-    def __init__(self, session):
+    def initWithSession(self, session):
         self._session  = session
         self._updating = True
         self.connectWithSession(session)
@@ -177,13 +177,11 @@ class SessionControl:
 
 class ViewGroup(_QtWidgets.QGroupBox, SessionControl):
     """a group box view being controlled by a DeviceControl object."""
-    def __init__(self, session,
-                 title="Group",
-                 parent=None):
+    def __init__(self, title="Group", session=None, parent=None):
         _QtWidgets.QGroupBox.__init__(self, title, parent=parent)
+        self.initWithSession(session)
         self._layout  = _QtWidgets.QGridLayout()
         self.setLayout(self._layout)
-        SessionControl.__init__(self, session)
 
     def _addFormItem(self, item, row, col, widget_colspan=1):
         self._layout.addWidget(item.label,  row,  col, alignment=_QtCore.Qt.AlignRight)

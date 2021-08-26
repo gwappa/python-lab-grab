@@ -51,9 +51,10 @@ try:
                 component.message.connect(self.handleMessageFromChild)
             self.message.connect(self.log)
 
+            self._control.openedDevice.connect(self._updateWithOpeningDevice)
+            self._control.closedDevice.connect(self._updateWithClosingDevice)
             self._control.acquisitionReady.connect(self._initializeAcquisition)
             self._control.acquisitionEnded.connect(self._finalizeAcquisition)
-            # TODO: connect components with each other
 
         def items(self):
             return (
@@ -112,8 +113,18 @@ try:
         def storage(self):
             return self._storage
 
-        def _initializeAcquisition(self, rate, descriptor, store_frames):
+        def _updateWithOpeningDevice(self, device):
+            self._acquisition.updateWithDevice(device)
+
+        def _updateWithClosingDevice(self):
+            self._acquisition.updateWithDevice(None)
+
+        def _initializeAcquisition(self, descriptor, store_frames):
             if store_frames == True:
+                if self._acquisition.framerate.auto == True:
+                    rate = self._acquisition.framerate.value
+                else:
+                    rate = self._acquisition.framerate.preferred
                 self._storage.prepare(framerate=rate, descriptor=descriptor)
                 self._control.frameReady.connect(self._storage.write)
 
