@@ -56,6 +56,8 @@ try:
             self._control.acquisitionReady.connect(self._initializeAcquisition)
             self._control.acquisitionEnded.connect(self._finalizeAcquisition)
 
+            self._storage.interruptAcquisition.connect(self._dealWithEncodingError)
+
         def items(self):
             return (
                 ("experiment",  self._experiment),
@@ -134,6 +136,10 @@ try:
                 self._storage.prepare(framerate=rate, descriptor=descriptor)
                 self._control.frameReady.connect(self._storage.write)
 
+        def _dealWithEncodingError(self, msg):
+            self._control.setAcquisitionMode(utils.AcquisitionModes.IDLE)
+            self.message.emit("error", "Encoding failed unexpectedly: Please refer to the console for more details")
+
         def _finalizeAcquisition(self):
             if self._storage.is_running():
                 self._storage.close()
@@ -204,6 +210,7 @@ try:
     from . import storage
     from . import views
     from . import commands
+    from . import utils
 
 except ImportError:
     raise RuntimeError("an error occurred while attempting to import 'pyqtgraph'. install it, or fix the installation.")

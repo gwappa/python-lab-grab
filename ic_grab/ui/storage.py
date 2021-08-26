@@ -197,11 +197,12 @@ class StorageService(_QtCore.QObject):
 
     _singleton = None
 
-    updatedEncoder   = _QtCore.pyqtSignal(object) # an Encoder object
-    updatedDirectory = _QtCore.pyqtSignal(str)
-    updatedPattern   = _QtCore.pyqtSignal(str)
-    updatedFileName  = _QtCore.pyqtSignal(str)
-    message          = _QtCore.pyqtSignal(str, str)
+    updatedEncoder       = _QtCore.pyqtSignal(object) # an Encoder object
+    updatedDirectory     = _QtCore.pyqtSignal(str)
+    updatedPattern       = _QtCore.pyqtSignal(str)
+    updatedFileName      = _QtCore.pyqtSignal(str)
+    interruptAcquisition = _QtCore.pyqtSignal(str) # error msg
+    message              = _QtCore.pyqtSignal(str, str)
 
     # currently the method is defined using the `cls._singleton` object
     # so that every subclass can have its own singleton object.
@@ -308,28 +309,42 @@ class StorageService(_QtCore.QObject):
             self._convert = lambda frame: frame.T
 
     def write(self, index, frame):
-        sink = self._sink
-        while index > self._nextindex:
-            sink.write(self._empty.tobytes())
+        try:
+            sink = self._sink
+            while index > self._nextindex:
+                sink.write(self._empty.tobytes())
+                self._nextindex += 1
+            sink.write(self._convert(frame).tobytes())
             self._nextindex += 1
-        sink.write(self._convert(frame).tobytes())
-        self._nextindex += 1
+        except OSError:
+            # some I/O error occurred
+            proc = self._proc
+            if proc is not None:
+                stdout, stderr = self._terminate_safely(proc)
+                msg = '\n'.join(item.decode('utf-8') for item in (stdout, stderr) if item is not None)
+                self.interruptAcquisition.emit(msg)
+                self._proc = None
+                del proc
 
     def close(self):
         if self._proc is not None:
             proc = self._proc
-            # 'safely' terminate the process
-            try:
-                stdout, stderr = proc.communicate(timeout=self.DEFAULT_TIMEOUT)
-            except TimeoutExpired:
-                proc.kill()
-                stdout, stderr = proc.communicate()
+            stdout, stderr = self._terminate_safely(proc)
             if stdout is not None:
                 print(stdout.decode('utf-8'), file=_sys.stdout, flush=True)
             if stderr is not None:
                 print(stderr.decode('utf-8'), file=_sys.stderr, flush=True)
             self._proc = None
             del proc
+
+    def _terminate_safely(self, proc):
+        # 'safely' terminate the process
+        try:
+            stdout, stderr = proc.communicate(timeout=self.DEFAULT_TIMEOUT)
+        except TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+        return stdout, stderr
 
     def is_running(self):
         """returns whether the storage service is currently running the encoder process."""
