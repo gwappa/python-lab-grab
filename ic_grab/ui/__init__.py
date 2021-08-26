@@ -51,6 +51,8 @@ try:
                 component.message.connect(self.handleMessageFromChild)
             self.message.connect(self.log)
 
+            self._control.acquisitionReady.connect(self._initializeAcquisition)
+            self._control.acquisitionEnded.connect(self._finalizeAcquisition)
             # TODO: connect components with each other
 
         def items(self):
@@ -110,6 +112,20 @@ try:
         def storage(self):
             return self._storage
 
+        def _initializeAcquisition(self, rate, descriptor, store_frames):
+            if store_frames == True:
+                self._storage.prepare(framerate=rate, descriptor=descriptor)
+                self._control.frameReady.connect(self._storage.write)
+
+        def _finalizeAcquisition(self):
+            if self._storage.is_running():
+                self._storage.close()
+            # in any case
+            try:
+                self._control.frameReady.disconnect(self._storage.write)
+            except TypeError: # it has not been connected
+                pass
+
     class MainWindow(_QtWidgets.QMainWindow):
         DEFAULT_TITLE    = "IC-GRAB"
         DEFAULT_GEOMETRY = (100, 100, 1200, 720) # X, Y, W, H
@@ -126,24 +142,18 @@ try:
             self._widget.setLayout(self._layout)
 
             # create control objects
-            self._control    = device.DeviceControl()
-            self._experiment = experiment.Experiment.instance()
-            self._storage    = storage.StorageService.instance()
-            self._control.message.connect(self.updateWithMessage)
-            self._experiment.message.connect(self.updateWithMessage)
-            self._storage.message.connect(self.updateWithMessage)
+            self._session    = SessionManager()
+            self._session.message.connect(self.updateWithMessage)
 
-            self._deviceselect = views.DeviceSelector(controller=self._control)
-            self._frameformat  = views.FrameFormatSettings(controller=self._control)
-            self._acquisition  = views.AcquisitionSettings(controller=self._control)
-            self._exp_edit     = views.ExperimentSettings(controller=self._control,
-                                                          experiment=self._experiment)
-            self._storage_edit = views.StorageSettings(controller=self._control,
-                                                       storage_service=self._storage)
-            self._frame        = views.FrameView(controller=self._control)
+            self._exp_edit     = views.ExperimentSettings(self._session)
+            self._deviceselect = views.DeviceSelector(self._session)
+            self._frameformat  = views.FrameFormatSettings(self._session)
+            self._acquisition  = views.AcquisitionSettings(self._session)
+            self._storage_edit = views.StorageSettings(self._session)
+            self._frame        = views.FrameView(self._session)
 
             # add commands bar
-            self._commands     = commands.CommandBar(controller=self._control)
+            self._commands     = commands.CommandBar(self._session)
 
             # add child components to the main widget
             self._layout.addWidget(self._frame, 0, 0, 5, 1)

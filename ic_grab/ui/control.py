@@ -50,6 +50,13 @@ class DeviceControl(_QtCore.QObject):
         """emits message() corresponding to the driver error."""
         self.message.emit("error", f"Driver error: {e}")
 
+    def get_device_names(self):
+        try:
+            return _tisgrabber.Camera.get_device_names()
+        except RuntimeError as e:
+            self.fireDriverError(e)
+            return ()
+
     def openDevice(self, device_name):
         try:
             device = _tisgrabber.Camera(device_name)
