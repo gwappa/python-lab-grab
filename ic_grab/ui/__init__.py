@@ -201,6 +201,18 @@ try:
         def updateWithMessage(self, level, message):
             if level == "info":
                 self.statusBar().showMessage(message)
+            elif level in ("warning", "error"):
+                elems = message.split(":")
+                if len(elems) > 1:
+                    title = elems[0]
+                    text  = ':'.join(elems[1:])
+                else:
+                    title = ""
+                    text  = message
+                if level == "error":
+                    _QtWidgets.QMessageBox.critical(self, title, text)
+                else: # warning
+                    _QtWidgets.QMessageBox.warning(self, title, text)
             else:
                 _LOGGER.warning(f"MainWindow has not been set up for handling the '{level}' log level.")
 
