@@ -182,19 +182,19 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
                             stdin=_sp.PIPE)
 
 def no_quality_option(value):
+    _LOGGER.debug("no quality norm defined")
     return []
 
 def mjpeg_quality_option(value):
     """returns the value from 2 to 31, with a lower value being a higher quality."""
     quality = 31 + round((1 - value) * 29 / 99)
-    _LOGGER.info(f"MJPEG quality norm: {quality}")
+    _LOGGER.debug(f"MJPEG quality norm: {quality}")
     return [ "-q:v", str(quality) ]
 
 def h264_nvenc_quality_option(value):
     """try to convert quality from 10 to 43, with a lower value being a higher quality."""
-    _LOGGER.info(f"base quality: {value}")
     quality = 43 + round((1 - value) * 33 / 99)
-    _LOGGER.info(f"NVEnc quality norm: {quality}")
+    _LOGGER.debug(f"NVEnc quality norm: {quality}")
     return [ "-rc:v", "vbr", "-cq:v", str(quality) ]
 
 BASE_ENCODER_LIST = (
