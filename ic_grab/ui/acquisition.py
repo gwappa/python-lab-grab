@@ -312,4 +312,4 @@ class FrameRotationSetting(_models.SelectionModel):
 
     @property
     def method(self):
-        return _utils.FrameRotation.get(value)
+        return _utils.FrameRotation.get(self._value)

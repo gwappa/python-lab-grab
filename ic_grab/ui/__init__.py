@@ -47,6 +47,8 @@ try:
             self._acquisition = acquisition.AcquisitionSettings()
             self._storage     = storage.StorageService.instance()
 
+            self._control.initWithAcquisition(self._acquisition)
+
             for _, component in self.items():
                 component.message.connect(self.handleMessageFromChild)
             self.message.connect(self.log)

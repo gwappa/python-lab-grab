@@ -45,6 +45,11 @@ class DeviceControl(_QtCore.QObject):
         super().__init__(parent=parent)
         self._device = device
         self._mode   = _utils.AcquisitionModes.IDLE
+        self._acq    = None
+
+    def initWithAcquisition(self, acq):
+        self._acq = acq
+        self._rotation_method = acq.rotation.method
 
     def fireDriverError(self, e):
         """emits message() corresponding to the driver error."""
@@ -110,14 +115,16 @@ class DeviceControl(_QtCore.QObject):
             if not device.is_setup():
                 device.prepare(preview=False)
 
+            self._rotation_method = self._acq.rotation.method
+
             # let the other modules prepare for acquisition
             # (they have to know which device it is concerning)
-            self.acquisitionReady.emit(device.image_descriptor,
+            self.acquisitionReady.emit(device.image_descriptor.rotate_deg(int(self._acq.rotation.value)),
                                        mode == _utils.AcquisitionModes.GRAB)
             device.start(preview=False, update_descriptor=False)
         else:
             raise ValueError(f"unexpected mode: {mode}")
 
     def _frameReadyCallback(self, device, frame_index, frame):
-        self.frameReady.emit(frame_index, _utils.image_to_display(frame))
+        self.frameReady.emit(frame_index, self._rotation_method(frame))
         #_LOGGER.info(f"frame #{frame_index}: {frame.shape}@{str(frame.dtype)}")
