@@ -143,7 +143,7 @@ class EncodingDevices:
             _LOGGER.warning("unknown encoder device name: " + device)
             return False
 
-class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pix_fmt"))):
+class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pix_fmt", "quality_option"))):
     @property
     def description(self):
         return f"{self.label} (*{self.suffix})"
@@ -155,7 +155,10 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
             ret += ", " + self.device + "-encoding"
         return ret
 
-    def as_ffmpeg_command(self, outpath, descriptor, framerate=30):
+    def has_quality_setting(self):
+        return len(self.quality_option(1)) > 0
+
+    def as_ffmpeg_command(self, outpath, descriptor, framerate=30, quality=75):
         """returns a list of options used to encode using the ffmpeg command."""
 
         ## FIXME: how shall we set e.g. the CRF value / bit rate?
@@ -166,23 +169,39 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
                     framerate=framerate,
                     pixel_format=descriptor.pixel_format.ffmpeg_style
                 ) \
+                + [ "-vcodec", self.vcodec ] + self.quality_option(quality) \
                 + [
-                    "-vcodec", self.vcodec,
                     "-pix_fmt", self.pix_fmt,
                     str(outpath)
                 ]
 
-    def open_ffmpeg(self, outpath, descriptor, framerate=30):
+    def open_ffmpeg(self, outpath, descriptor, framerate=30, quality=75):
         """opens and returns a `subprocess.Popen` object
         corresponding to the encoder process."""
-        return _sp.Popen(self.as_ffmpeg_command(outpath, descriptor, framerate),
+        return _sp.Popen(self.as_ffmpeg_command(outpath, descriptor, framerate, quality),
                             stdin=_sp.PIPE)
 
+def no_quality_option(value):
+    return []
+
+def mjpeg_quality_option(value):
+    """returns the value from 2 to 31, with a lower value being a higher quality."""
+    quality = 31 + round((1 - value) * 29 / 99)
+    _LOGGER.info(f"MJPEG quality norm: {quality}")
+    return [ "-q:v", str(quality) ]
+
+def h264_nvenc_quality_option(value):
+    """try to convert quality from 10 to 43, with a lower value being a higher quality."""
+    _LOGGER.info(f"base quality: {value}")
+    quality = 43 + round((1 - value) * 33 / 99)
+    _LOGGER.info(f"NVEnc quality norm: {quality}")
+    return [ "-rc:v", "vbr", "-cq:v", str(quality) ]
+
 BASE_ENCODER_LIST = (
-    Encoder("Raw video", EncodingDevices.NONE,   ".avi", "rawvideo", "yuv420p"),
-    Encoder("MJPEG",     EncodingDevices.CPU,    ".avi", "mjpeg",    "yuvj420p"),
-    Encoder("MJPEG",     EncodingDevices.QSV,    ".avi", "mjpeg_qsv", "yuvj420p"),
-    Encoder("H.264",     EncodingDevices.NVIDIA, ".avi", "h264_nvenc", "yuv420p"),
+    Encoder("Raw video", EncodingDevices.NONE,   ".avi", "rawvideo",   "yuv420p",  no_quality_option),
+    Encoder("MJPEG",     EncodingDevices.CPU,    ".avi", "mjpeg",      "yuvj420p", mjpeg_quality_option),
+    Encoder("MJPEG",     EncodingDevices.QSV,    ".avi", "mjpeg_qsv",  "yuvj420p", mjpeg_quality_option),
+    Encoder("H.264",     EncodingDevices.NVIDIA, ".avi", "h264_nvenc", "yuv420p",  h264_nvenc_quality_option),
 )
 
 ### the main storage service
@@ -192,12 +211,14 @@ class StorageService(_QtCore.QObject):
     TIMESTAMP_FORMAT      = "%H%M%S"
     DEFAULT_NAME_PATTERN  = "{subject}_{date}_{domain}_{time}{appendage}"
     DEFAULT_TIMEOUT       = 3.0
+    QUALITY_RANGE         = (1, 100)
 
     DEFAULT_ENCODERS = tuple(enc for enc in BASE_ENCODER_LIST if EncodingDevices.available(enc.device))
 
     _singleton = None
 
     updatedEncoder       = _QtCore.pyqtSignal(object) # an Encoder object
+    updatedQuality       = _QtCore.pyqtSignal(int)
     updatedDirectory     = _QtCore.pyqtSignal(str)
     updatedPattern       = _QtCore.pyqtSignal(str)
     updatedFileName      = _QtCore.pyqtSignal(str)
@@ -218,6 +239,7 @@ class StorageService(_QtCore.QObject):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self._encoder    = self.DEFAULT_ENCODERS[0]
+        self._quality    = 75
         self._directory  = str(_Path().resolve())
         self._pattern    = self.DEFAULT_NAME_PATTERN
 
@@ -235,10 +257,12 @@ class StorageService(_QtCore.QObject):
         out["directory"] = self._directory
         out["pattern"]   = self._pattern
         out["encoder"]   = self._encoder.description
+        if self.has_quality_setting():
+            out["quality"]   = self._quality
         return out
 
     def load_dict(self, cfg):
-        for key in ("directory", "pattern", "encoder"):
+        for key in ("directory", "pattern", "encoder", "quality"):
             if key in cfg.keys():
                 setattr(self, key, cfg[key])
 
@@ -257,6 +281,21 @@ class StorageService(_QtCore.QObject):
         self.updatedEncoder.emit(self._encoder)
         self.message.emit("info", f"video encoder: {self._encoder.description}")
         self.updateFileName()
+
+    def getQuality(self):
+        return self._quality
+
+    def setQuality(self, value):
+        self._quality = int(value)
+        self.updatedQuality.emit(self._quality)
+        self.message.emit("info", f"encoding quality: {self._quality} (the higher the better)")
+
+    @property
+    def quality_range(self):
+        return self.QUALITY_RANGE
+
+    def has_quality_setting(self):
+        return self._encoder.has_quality_setting()
 
     def getDirectory(self):
         return self._directory
@@ -299,7 +338,8 @@ class StorageService(_QtCore.QObject):
     def prepare(self, framerate=30, descriptor=None):
         self._proc = self._encoder.open_ffmpeg(self.as_path(self.filename),
                                                descriptor=descriptor,
-                                               framerate=framerate)
+                                               framerate=framerate,
+                                               quality=self._quality)
         self._sink      = self._proc.stdin
         self._nextindex = 0
         self._empty     = _np.zeros(**descriptor.numpy_formatter)
@@ -365,6 +405,7 @@ class StorageService(_QtCore.QObject):
         return opts
 
     encoder   = property(fget=getEncoder,   fset=setEncoder)
+    quality   = property(fget=getQuality,   fset=setQuality)
     directory = property(fget=getDirectory, fset=setDirectory)
     pattern   = property(fget=getPattern,   fset=setPattern)
     filename  = property(fget=updateFileName)

@@ -564,14 +564,22 @@ class StorageSettings(_utils.ViewGroup):
         self._pattern.widget.editingFinished.connect(self.dispatchPatternUpdate)
         self._file    = _utils.FormItem(self.FILE_DESC_NOGRAB, _QtWidgets.QLabel(self.session.storage.filename))
         self._encoder = _utils.FormItem("Video format", _QtWidgets.QComboBox())
+        self._quality = _utils.FormItem("Quality", EncodingQualitySelector())
+        self._quality.widget.setRange(self.session.storage.quality_range)
+        self._quality.widget.setSteps(1, 10)
+        self._quality.widget.setValue(self.session.storage.quality)
+        self.session.storage.updatedQuality.connect(self._quality.widget.setValue)
+        self._quality.widget.valueChanged.connect(self.session.storage.setQuality)
+        self._quality.setEnabled(self.session.storage.has_quality_setting())
         for encoder in self.session.storage.list_encoders():
             self._encoder.widget.addItem(encoder.description)
         self._encoder.widget.setCurrentText(self.session.storage.encoder.description)
         self._encoder.widget.currentTextChanged.connect(self.dispatchEncoderUpdate)
         self._addFormItem(self._encoder,   0, 0)
-        self._addFormItem(self._directory, 1, 0)
-        self._addFormItem(self._pattern,   2, 0)
-        self._addFormItem(self._file,      3, 0)
+        self._addFormItem(self._quality,   1, 0)
+        self._addFormItem(self._directory, 2, 0)
+        self._addFormItem(self._pattern,   3, 0)
+        self._addFormItem(self._file,      4, 0)
 
         self.setEnabled(True)
 
@@ -610,6 +618,7 @@ class StorageSettings(_utils.ViewGroup):
     def updateWithEncoder(self, codec):
         self._updating = True
         self._encoder.widget.setCurrentText(codec.description)
+        self._quality.setEnabled(self.session.storage.has_quality_setting())
         self._updating = False
 
     def updateWithDirectory(self, value):
@@ -637,6 +646,70 @@ class StorageSettings(_utils.ViewGroup):
             self._file.label.setText(self.FILE_DESC_GRAB)
         else:
             self._file.label.setText(self.FILE_DESC_NOGRAB)
+
+class EncodingQualitySelector(_QtWidgets.QWidget):
+    valueChanged = _QtCore.pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super().__init__()
+        self._slider = _QtWidgets.QSlider(_QtCore.Qt.Horizontal)
+        self._editor = _utils.InvalidatableSpinBox()
+        self._layout = _QtGui.QHBoxLayout()
+
+        self.setLayout(self._layout)
+        self._layout.addWidget(self._slider)
+        self._layout.addWidget(self._editor)
+        self._updating = False
+        self._slidermoving = False
+
+        self._slider.sliderPressed.connect(self.updateWithSliderStart)
+        self._slider.sliderReleased.connect(self.updateWithSliderStop)
+        self._slider.valueChanged.connect(self.requestFromSlider)
+        self._editor.valueChanged.connect(self.requestFromEditor)
+        self._editor.edited.connect(self._editor.invalidate)
+
+    def setRange(self, rng):
+        self._updating = True
+        m, M = min(rng), max(rng)
+        for obj in (self._slider, self._editor):
+            obj.setMinimum(m)
+            obj.setMaximum(M)
+        self._updating = False
+
+    def setValue(self, value):
+        self._updating = True
+        for obj in (self._slider, self._editor):
+            obj.setValue(value)
+        self._editor.revalidate()
+        self._slidermoving = False
+        self._updating = False
+
+    def setSteps(self, single, page):
+        for obj in (self._slider, self._editor):
+            obj.setSingleStep(single)
+        self._slider.setPageStep(page)
+        self._slider.setTickPosition(_QtWidgets.QSlider.TicksBelow)
+        self._slider.setTickInterval(page)
+
+    def requestFromSlider(self, value):
+        if self._updating == True:
+            return
+        elif self._slidermoving == True:
+            self._editor.edit(value)
+            return
+        self.valueChanged.emit(value)
+
+    def requestFromEditor(self, value):
+        if (self._updating == True) or (self._editor.editing == True):
+            return
+        self.valueChanged.emit(value)
+
+    def updateWithSliderStart(self):
+        self._slidermoving = True
+
+    def updateWithSliderStop(self):
+        self._slidermoving = False
+        self.requestFromSlider(self._slider.value())
 
 class DirectorySelector(_QtWidgets.QWidget):
     directorySelected = _QtCore.pyqtSignal(str)

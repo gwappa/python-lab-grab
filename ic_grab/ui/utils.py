@@ -303,6 +303,11 @@ class InvalidatableSpinBox(_QtWidgets.QSpinBox):
         self._editing = False
         clear_dirty(self)
 
+    def edit(self, value):
+        self._editing = True
+        self.edited.emit()
+        self.setValue(value)
+
 class InvalidatableDoubleSpinBox(_QtWidgets.QDoubleSpinBox):
     """invalidatable version of QDoubleSpinBox."""
     edited = _QtCore.pyqtSignal()
