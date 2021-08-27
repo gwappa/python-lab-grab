@@ -74,6 +74,57 @@ class AcquisitionModes:
     GRAB    = "GRAB"  # start GRAB mode
     IDLE    = "ABORT" # stop the current acquisition
 
+def transpose_image(img):
+    if img.ndim == 3:
+        return img.transpose((1,0,2))
+    else:
+        return img.T
+
+class FrameRotation:
+    """a set of functions intended for _clockwise_ rotation of acquired frames."""
+
+    @staticmethod
+    def R270(img):
+        """as it is read from the IS camera."""
+        return img
+
+    @staticmethod
+    def R0(img):
+        """+90 from the original image (from the IS camera)."""
+        return transpose_image(img)[:,::-1]
+
+    @staticmethod
+    def R90(img):
+        """+180 from the original image (from the IS camera)."""
+        return img[::-1,::-1]
+
+    @staticmethod
+    def R180(img):
+        """-90 from the original image (from the IS camera)."""
+        return transpose_image(img)[::-1,:]
+
+    OPTIONS = None
+
+    @classmethod
+    def _init(cls):
+        if cls.OPTIONS is None:
+            cls.OPTIONS = {
+                "0":   cls.R0,
+                "90":  cls.R90,
+                "180": cls.R180,
+                "270": cls.R270,
+            }
+
+    @staticmethod
+    def iterate():
+        FrameRotation._init()
+        return tuple(key for key in FrameRotation.OPTIONS.keys())
+
+    @staticmethod
+    def get(key):
+        FrameRotation._init()
+        return FrameRotation.OPTIONS[key]
+
 class FrameFormat(_namedtuple("_FrameFormat", ("pixel", "width", "height"))):
     FORMAT_PATTERN = _re.compile(r"([a-zA-Z0-9-]+) \((\d+)x(\d+)\)")
 

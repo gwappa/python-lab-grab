@@ -29,6 +29,7 @@ class AcquisitionSettings(_models.DeviceSetting):
     def __init__(self, device=None, parent=None):
         super().__init__(device=device, parent=parent)
         self._format    = FrameFormatSetting(device=device, parent=self)
+        self._rotation  = FrameRotationSetting(device=device, parent=self)
         self._framerate = FrameRateSetting(device=device, parent=self)
         self._exposure  = ExposureSetting(device=device, parent=self)
         self._gain      = GainSetting(device=device, parent=self)
@@ -42,6 +43,7 @@ class AcquisitionSettings(_models.DeviceSetting):
     def items(self):
         return (
             ("frame-format", self._format),
+            ("frame-rotation", self._rotation),
             ("frame-rate",   self._framerate),
             ("exposure",     self._exposure),
             ("gain",         self._gain),
@@ -85,6 +87,10 @@ class AcquisitionSettings(_models.DeviceSetting):
     @property
     def format(self):
         return self._format
+
+    @property
+    def rotation(self):
+        return self._rotation
 
     @property
     def framerate(self):
@@ -279,3 +285,31 @@ class FrameFormatSetting(_models.SelectionModel):
         self._device.video_format = value
         self._value = value
         self.message.emit("info", "frame format: " + value)
+
+class FrameRotationSetting(_models.SelectionModel):
+    PARAMETER_LABEL  = "frame rotation"
+    READ_FROM_DEVICE = False
+    DEFAULT_OPTIONS  = _utils.FrameRotation.iterate()
+    DEFAULT_VALUE    = "0"
+
+    def __init__(self, device=None, parent=None):
+        super().__init__(device=device, parent=parent)
+        self._value = self.DEFAULT_VALUE
+
+    # override
+    def getOptionsImpl(self):
+        return self.DEFAULT_OPTIONS
+
+    # override
+    def getValueImpl(self):
+        return self._value
+
+    # override
+    def setValueImpl(self, value):
+        value = str(value)
+        self._value = value
+        self.message.emit("info", f"frame rotation (clockwise): {str(value)} deg")
+
+    @property
+    def method(self):
+        return _utils.FrameRotation.get(value)

@@ -260,22 +260,28 @@ class DeviceSelector(_utils.ViewGroup):
         self._action.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
 
 class FrameFormatSettings(_utils.ViewGroup):
-    requestedFormatUpdate = _QtCore.pyqtSignal(str)
+    requestedFormatUpdate   = _QtCore.pyqtSignal(str)
+    requestedRotationUpdate = _QtCore.pyqtSignal(str)
 
     def __init__(self, session, title="Frame", parent=None):
         super().__init__(session=session, title=title, parent=parent)
-        self._format = _utils.FormItem("Format", _QtWidgets.QComboBox())
-        self._x      = _utils.FormItem("Offset X", _QtWidgets.QSpinBox())
-        self._y      = _utils.FormItem("Offset Y", _QtWidgets.QSpinBox())
-        self._center = _QtWidgets.QCheckBox("Center ROI")
+        self._format   = _utils.FormItem("Format", _QtWidgets.QComboBox())
+        self._x        = _utils.FormItem("Offset X", _QtWidgets.QSpinBox())
+        self._y        = _utils.FormItem("Offset Y", _QtWidgets.QSpinBox())
+        self._center   = _QtWidgets.QCheckBox("Center ROI")
+        self._rotation = _utils.FormItem("Rotation clockwise", _QtWidgets.QComboBox())
+        for item in self.session.acquisition.rotation.options:
+            self._rotation.widget.addItem(item)
         for row, obj in enumerate((self._format,
                                    self._x,
                                    self._y,)):
             self._addFormItem(obj, row, 0)
         self._layout.addWidget(self._center, 3, 1)
+        self._addFormItem(self._rotation, 4, 0)
 
         self.setEnabled(False)
         self._format.widget.currentTextChanged.connect(self.dispatchFormatUpdate)
+        self._rotation.widget.currentTextChanged.connect(self.dispatchRotationUpdate)
 
     # override
     def connectWithSession(self, session):
@@ -284,19 +290,25 @@ class FrameFormatSettings(_utils.ViewGroup):
         session.control.updatedAcquisitionMode.connect(self.updateWithAcquisitionMode)
 
         session.acquisition.format.selectionChanged.connect(self.updateWithFormat)
+        session.acquisition.rotation.selectionChanged.connect(self.updateWithRotation)
         self.requestedFormatUpdate.connect(session.acquisition.format.setValue)
+        self.requestedRotationUpdate.connect(session.acquisition.rotation.setValue)
 
     def setEnabled(self, val):
-        for obj in (self._format,):
+        for obj in (self._format, self._rotation):
             obj.setEnabled(val)
         for obj in (self._x, self._y, self._center):
             obj.setEnabled(False)
 
     def dispatchFormatUpdate(self, fmt):
-        if self._updating == False:
-            self.requestedFormatUpdate.emit(fmt)
-        else:
-            _LOGGER.debug(f"updating with controller: suppressed to emit requestedFormatUpdate({repr(fmt)})")
+        if self._updating == True:
+            return
+        self.requestedFormatUpdate.emit(fmt)
+
+    def dispatchRotationUpdate(self, rot):
+        if self._updating == True:
+            return
+        self.requestedRotationUpdate.emit(rot)
 
     def updateWithOpeningDevice(self, device):
         # re-populate the format selector
@@ -314,6 +326,11 @@ class FrameFormatSettings(_utils.ViewGroup):
     def updateWithFormat(self, fmt):
         self._updating = True
         self._format.widget.setCurrentText(fmt)
+        self._updating = False
+
+    def updateWithRotation(self, rot):
+        self._updating = True
+        self._rotation.widget.setCurrentText(rot)
         self._updating = False
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
