@@ -36,6 +36,7 @@ from .. import LOGGER as _LOGGER
 class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
     INITIAL_DIMS   = (640, 480)
     DEFAULT_COLOR  = (255, 255, 255, 255)
+    TARGET_REFRESH = 35 # 30-40 FPS
 
     def __init__(self, session=None, parent=None):
         super().__init__(parent=parent)
@@ -45,12 +46,15 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
         self._scene.addItem(self._image)
         self._scene.setSceneRect(_QtCore.QRectF(0, 0, *self.INITIAL_DIMS))
         self.setScene(self._scene)
+        self._every   = 1
+        self._count   = 0
 
     # override
     def connectWithSession(self, session):
         session.acquisition.format.selectionChanged.connect(self.updateWithFormat)
         session.control.acquisitionReady.connect(self.prepareForAcquisition)
         session.control.frameReady.connect(self.updateWithFrame)
+        session.acquisition.framerate.settingsChanged.connect(self.updateWithFrameRateSettings)
 
     def updateWithFormat(self, format_name):
         ## TODO: merge with prepareForAcquisition()??
@@ -66,10 +70,17 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
         dims = desc.shape
         self._scene.setSceneRect(_QtCore.QRectF(0.0, 0.0, float(dims[1]), float(dims[0])))
         self._image.setImage(_np.zeros(dims, dtype=desc.dtype))
+        self._count = 0
         # TODO: set transform to fit the image to the rect
 
+    def updateWithFrameRateSettings(self, auto, preferred, actual):
+        self._every = round(actual / self.TARGET_REFRESH)
+
     def updateWithFrame(self, frame_index, frame):
-        self._image.setImage(frame)
+        self._count += 1
+        if self._count == self._every:
+            self._image.setImage(frame)
+            self._count = 0
 
 class ExperimentSettings(_utils.ViewGroup):
     requestSubjectUpdate   = _QtCore.pyqtSignal(str)
