@@ -94,11 +94,13 @@ class ExperimentSettings(_utils.ViewGroup):
 
         self._subject = _utils.FormItem("Subject", _utils.InvalidatableLineEdit(self.subject))
         self._date    = _utils.FormItem("Date", _QtWidgets.QDateEdit(self.date))
+        self._today   = _QtWidgets.QPushButton("Today")
         self._index   = _utils.FormItem("Session index", _utils.InvalidatableSpinBox())
         self._domain  = _utils.FormItem("Domain", _utils.InvalidatableLineEdit(self.domain))
         self._append  = _utils.FormItem("Appendage", _utils.InvalidatableLineEdit(self.appendage))
         self._addFormItem(self._subject,   0, 0, widget_colspan=2)
-        self._addFormItem(self._date,      1, 0, widget_colspan=2)
+        self._addFormItem(self._date,      1, 0, widget_colspan=1)
+        self._layout.addWidget(self._today,1, 2)
         self._addFormItem(self._index,     2, 0)
         self._addFormItem(self._domain,    3, 0, widget_colspan=2)
         self._addFormItem(self._append,    4, 0, widget_colspan=2)
@@ -118,6 +120,7 @@ class ExperimentSettings(_utils.ViewGroup):
         self._domain.widget.textChanged.connect(self._domain.widget.invalidate)
         self._domain.widget.editingFinished.connect(self.dispatchDomainUpdate)
         self._date.widget.dateChanged.connect(self.dispatchDateUpdate)
+        self._today.clicked.connect(self._updateToToday)
         self._index.widget.valueChanged.connect(self.dispatchIndexUpdate)
         self._append.widget.textChanged.connect(self._append.widget.invalidate)
         self._append.widget.editingFinished.connect(self.dispatchAppendageUpdate)
@@ -165,7 +168,12 @@ class ExperimentSettings(_utils.ViewGroup):
         return self.session.experiment.qDate_format
 
     def setEnabled(self, status):
-        for obj in (self._subject, self._date, self._index, self._domain, self._append):
+        for obj in (self._subject,
+                    self._date,
+                    self._today,
+                    self._index,
+                    self._domain,
+                    self._append):
             obj.setEnabled(status)
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
@@ -192,6 +200,11 @@ class ExperimentSettings(_utils.ViewGroup):
         if self._updating == True:
             return
         self.requestAppendageUpdate.emit(self._append.widget.text())
+
+    def _updateToToday(self):
+        if self._updating == True:
+            return # just in case
+        self.requestDateUpdate.emit(_QtCore.QDate.currentDate())
 
     def updateWithSubject(self, value):
         self._updating = True
