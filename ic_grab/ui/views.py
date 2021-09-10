@@ -96,14 +96,20 @@ class ExperimentSettings(_utils.ViewGroup):
         self._date    = _utils.FormItem("Date", _QtWidgets.QDateEdit(self.date))
         self._today   = _QtWidgets.QPushButton("Today")
         self._index   = _utils.FormItem("Session index", _utils.InvalidatableSpinBox())
+        self._type    = _utils.FormItem("Session type", _utils.InvalidatableLineEdit(""))
         self._domain  = _utils.FormItem("Domain", _utils.InvalidatableLineEdit(self.domain))
+        self._run     = _utils.FormItem("Run index", _utils.InvalidatableSpinBox())
+        self._autoinc = _QtWidgets.QCheckBox("Auto-increment")
         self._append  = _utils.FormItem("Appendage", _utils.InvalidatableLineEdit(self.appendage))
         self._addFormItem(self._subject,   0, 0, widget_colspan=2)
         self._addFormItem(self._date,      1, 0, widget_colspan=1)
         self._layout.addWidget(self._today,1, 2)
         self._addFormItem(self._index,     2, 0)
-        self._addFormItem(self._domain,    3, 0, widget_colspan=2)
-        self._addFormItem(self._append,    4, 0, widget_colspan=2)
+        self._addFormItem(self._type,      3, 0, widget_colspan=2)
+        self._addFormItem(self._domain,    4, 0, widget_colspan=2)
+        self._addFormItem(self._run,       5, 0, widget_colspan=1)
+        self._layout.addWidget(self._autoinc,5, 2)
+        self._addFormItem(self._append,    6, 0, widget_colspan=2)
         self._layout.setColumnStretch(0, 2)
         self._layout.setColumnStretch(1, 1)
         self._layout.setColumnStretch(2, 1)
@@ -114,6 +120,15 @@ class ExperimentSettings(_utils.ViewGroup):
         self._index.widget.setMinimum(1)
         self._index.widget.setMaximum(100)
         self._index.widget.setValue(1)
+
+        self._type.setEnabled(False)
+
+        self._run.widget.setMinimum(1)
+        self._run.widget.setMaximum(100)
+        self._run.widget.setValue(1)
+        self._run.setEnabled(False)
+        self._autoinc.setChecked(False)
+        self._autoinc.setEnabled(False)
 
         self._subject.widget.textChanged.connect(self._subject.widget.invalidate)
         self._subject.widget.editingFinished.connect(self.dispatchSubjectUpdate)
@@ -175,6 +190,8 @@ class ExperimentSettings(_utils.ViewGroup):
                     self._domain,
                     self._append):
             obj.setEnabled(status)
+        for obj in (self._type, self._run, self._autoinc):
+            obj.setEnabled(False)
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
