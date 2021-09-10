@@ -608,7 +608,7 @@ class StorageSettings(_utils.ViewGroup):
         self.requestedPatternUpdate.connect(session.storage.setPattern)
 
     def setEnabled(self, state):
-        for obj in (self._directory, self._pattern, self._encoder,):
+        for obj in (self._directory, self._pattern, self._encoder, self._quality, ):
             obj.setEnabled(state)
 
     def dispatchEncoderUpdate(self, value):
