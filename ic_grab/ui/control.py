@@ -109,6 +109,7 @@ class DeviceControl(_QtCore.QObject):
         if mode == _utils.AcquisitionModes.IDLE:
             if device.is_setup():
                 device.stop()
+                device.strobe = self.__prev_strobe # restore the previous (default) strobe setting
                 self.acquisitionEnded.emit()
         elif mode in (_utils.AcquisitionModes.FOCUS, _utils.AcquisitionModes.GRAB):
             # prepare the device
@@ -116,6 +117,12 @@ class DeviceControl(_QtCore.QObject):
                 device.prepare(preview=False)
 
             self._rotation_method = self._acq.rotation.method
+
+            self.__prev_strobe = device.strobe # spare the previous (default) strobe setting
+            device.strobe = _utils.StrobeModes.requires_strobe(
+                                                    self._acq.strobe.value,
+                                                    mode
+                                                )
 
             # let the other modules prepare for acquisition
             # (they have to know which device it is concerning)
