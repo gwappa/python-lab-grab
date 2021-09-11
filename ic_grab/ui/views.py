@@ -384,6 +384,7 @@ class AcquisitionSettings(_utils.ViewGroup):
     requestedExposureUpdate   = _QtCore.pyqtSignal(object) # int
     requestedAutoGainMode     = _QtCore.pyqtSignal(bool)
     requestedGainUpdate       = _QtCore.pyqtSignal(object) # float
+    requestedGammaUpdate      = _QtCore.pyqtSignal(object) # float
 
     def __init__(self, session, title="Acquisition", parent=None):
         super().__init__(session=session, title=title, parent=parent)
@@ -396,6 +397,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._rate.widget.setValue(30)
         self._rate.widget.edited.connect(self._rate.widget.invalidate)
         self._rate.widget.valueChanged.connect(self.dispatchFrameRateUpdate)
+        self._triggered = _QtWidgets.QCheckBox("Use external trigger")
+        self._triggered.stateChanged.connect(self.dispatchTriggerStatusUpdate)
 
         self._strobe   = _utils.FormItem("Strobe output", StrobeModeSelector(session))
 
@@ -406,6 +409,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._exposure.widget.setValue(10000)
         self._exposure.widget.edited.connect(self._exposure.widget.invalidate)
         self._exposure.widget.valueChanged.connect(self.dispatchExposureUpdate)
+        self._autoexp   = _QtWidgets.QCheckBox("Auto-exposure")
+        self._autoexp.stateChanged.connect(self.dispatchAutoExposureUpdate)
 
         self._gain = _utils.FormItem("Gain", _utils.InvalidatableDoubleSpinBox())
         # set up the gain spin box
@@ -416,17 +421,22 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._gain.widget.setValue(1.0)
         self._gain.widget.edited.connect(self._gain.widget.invalidate)
         self._gain.widget.valueChanged.connect(self.dispatchGainUpdate)
+        self._autogain  = _QtWidgets.QCheckBox("Auto-gain")
+        self._autogain.stateChanged.connect(self.dispatchAutoGainUpdate)
+
+        self._gamma = _utils.FormItem("Gamma", _utils.InvalidatableDoubleSpinBox())
+        self._gamma.widget.setDecimals(2)
+        self._gamma.widget.setMinimum(0.01)
+        self._gamma.widget.setMaximum(8.0)
+        self._gamma.widget.setSingleStep(0.1)
+        self._gamma.widget.setValue(1.0)
+        self._gamma.widget.edited.connect(self._gamma.widget.invalidate)
+        self._gamma.widget.valueChanged.connect(self.dispatchGammaUpdate)
 
         self._binning = _utils.FormItem("Binning", _QtWidgets.QComboBox())
         self._binning.widget.addItem("1")
         # TODO: specify actions (probably implement a dedicated class)
 
-        self._triggered = _QtWidgets.QCheckBox("Use external trigger")
-        self._triggered.stateChanged.connect(self.dispatchTriggerStatusUpdate)
-        self._autoexp   = _QtWidgets.QCheckBox("Auto-exposure")
-        self._autoexp.stateChanged.connect(self.dispatchAutoExposureUpdate)
-        self._autogain  = _QtWidgets.QCheckBox("Auto-gain")
-        self._autogain.stateChanged.connect(self.dispatchAutoGainUpdate)
         self._addFormItem(self._rate, 0, 0)
         self._layout.addWidget(self._triggered, 0, 2,
                                alignment=_QtCore.Qt.AlignLeft)
@@ -434,8 +444,9 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._layout.addWidget(self._autoexp, 1, 2)
         self._addFormItem(self._gain, 2, 0)
         self._layout.addWidget(self._autogain, 2, 2)
-        self._addFormItem(self._binning, 3, 0)
-        self._addFormItem(self._strobe, 4, 0)
+        self._addFormItem(self._gamma, 3, 0)
+        self._addFormItem(self._binning, 4, 0)
+        self._addFormItem(self._strobe, 5, 0)
 
         self.setEnabled(False)
 
@@ -451,6 +462,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         session.acquisition.exposure.settingsChanged.connect(self.updateWithExposureSettings)
         session.acquisition.gain.rangeChanged.connect(self.updateWithGainRange)
         session.acquisition.gain.settingsChanged.connect(self.updateWithGainSettings)
+        session.acquisition.gamma.rangeChanged.connect(self.updateWithGammaRange)
+        session.acquisition.gamma.settingsChanged.connect(self.updateWithGammaSettings)
 
         self.requestedAutoTriggerMode.connect(session.acquisition.framerate.setAuto)
         self.requestedFrameRateUpdate.connect(session.acquisition.framerate.setPreferred)
@@ -458,13 +471,14 @@ class AcquisitionSettings(_utils.ViewGroup):
         self.requestedExposureUpdate.connect(session.acquisition.exposure.setPreferred)
         self.requestedAutoGainMode.connect(session.acquisition.gain.setAuto)
         self.requestedGainUpdate.connect(session.acquisition.gain.setPreferred)
+        self.requestedGammaUpdate.connect(session.acquisition.gamma.setPreferred)
 
     def setEnabled(self, val):
         for obj in (self._rate, self._triggered, self._strobe):
             obj.setEnabled(val)
         for obj in (self._exposure, self._autoexp):
             obj.setEnabled(val)
-        for obj in (self._gain, self._autogain):
+        for obj in (self._gain, self._autogain, self._gamma):
             obj.setEnabled(val)
         self._binning.setEnabled(False)
 
@@ -498,6 +512,11 @@ class AcquisitionSettings(_utils.ViewGroup):
             return
         self.requestedGainUpdate.emit(self._gain.widget.value())
 
+    def dispatchGammaUpdate(self):
+        if (self._updating == True) or (self._gamma.widget.editing == True):
+            return
+        self.requestedGammaUpdate.emit(self._gamma.widget.value())
+
     def updateWithOpeningDevice(self, device):
         self._updating = True
         self.setEnabled(True)
@@ -514,6 +533,11 @@ class AcquisitionSettings(_utils.ViewGroup):
 
     def updateWithAcquisitionMode(self, oldmode, newmode):
         self.setEnabled(newmode == _utils.AcquisitionModes.IDLE)
+        # re-enable those that are updatable even during acquisition
+        for obj in (self._exposure, self._autoexp, self._strobe,):
+            obj.setEnabled(True)
+        for obj in (self._gain, self._autogain, self._gamma):
+            obj.setEnabled(True)
 
     def updateWithFrameRateRange(self, minval, maxval):
         self._updating = True
@@ -557,6 +581,18 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._gain.widget.revalidate()
         self._autogain.setChecked(auto)
         self._gain.widget.setEnabled(not auto)
+        self._updating = False
+
+    def updateWithGammaRange(self, minval, maxval):
+        self._updating = True
+        self._gamma.widget.setMinimum(minval)
+        self._gamma.widget.setMaximum(maxval)
+        self._updating = False
+
+    def updateWithGammaSettings(self, auto, preferred, output):
+        self._updating = True
+        self._gamma.widget.setValue(output)
+        self._gamma.widget.revalidate()
         self._updating = False
 
 class StrobeModeSelector(_QtWidgets.QComboBox, _utils.SessionControl):

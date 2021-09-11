@@ -33,6 +33,7 @@ class AcquisitionSettings(_models.DeviceSetting):
         self._framerate = FrameRateSetting(device=device, parent=self)
         self._exposure  = ExposureSetting(device=device, parent=self)
         self._gain      = GainSetting(device=device, parent=self)
+        self._gamma     = GammaSetting(device=device, parent=self)
         self._strobe    = StrobeSetting(device=device, parent=self)
 
         # enables this AcquisitionSettings object
@@ -47,6 +48,7 @@ class AcquisitionSettings(_models.DeviceSetting):
             ("frame-rate",   self._framerate),
             ("exposure",     self._exposure),
             ("gain",         self._gain),
+            ("gamma",        self._gamma),
             ("strobe",       self._strobe),
         )
 
@@ -103,6 +105,10 @@ class AcquisitionSettings(_models.DeviceSetting):
     @property
     def gain(self):
         return self._gain
+
+    @property
+    def gamma(self):
+        return self._gamma
 
     @property
     def strobe(self):
@@ -236,6 +242,38 @@ class GainSetting(_models.ValueModel):
     def setValueImpl(self, value):
         self._device.gain = float(value)
         self.message.emit("info", f"manual gain setting: {self._device.gain:.1f}")
+
+class GammaSetting(_models.ValueModel):
+    PARAMETER_LABEL      = "gamma"
+    AUTO_PARAMETER_LABEL = "auto-gamma"
+    DEFAULT_RANGE        = (0, 5)
+    DEFAULT_AUTO         = False
+    DEFAULT_VALUE        = 1
+
+    def __init__(self, device=None, preferred=None, parent=None):
+        super().__init__(device=device, preferred=preferred, parent=parent)
+
+    # override
+    def isAutoImpl(self):
+        return self.DEFAULT_AUTO
+
+    # override
+    def setAutoImpl(self, status):
+        self.message.emit("warning", "auto-gamma is not supported")
+
+    # override
+    def getRangeImpl(self):
+        m, M = self._device.gamma_range
+        return m, M
+
+    # override
+    def getValueImpl(self):
+        return self._device.gamma
+
+    # override
+    def setValueImpl(self, value):
+        self._device.gamma = float(value)
+        self.message.emit("info", f"gamma setting: {self._device.gamma:.1f}")
 
 class StrobeSetting(_models.SelectionModel):
     PARAMETER_LABEL  = "strobe setting"
