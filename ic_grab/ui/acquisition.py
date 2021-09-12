@@ -163,7 +163,10 @@ class FrameRateSetting(_models.ValueModel):
     # override
     def setValueImpl(self, value):
         self._device.frame_rate = float(value)
-        self.message.emit("info", f"frame rate: {self._device.frame_rate:.1f} Hz")
+        if self.auto == True:
+            self.message.emit("info", f"frame rate: {self._device.frame_rate:.1f} Hz")
+        else:
+            self.message.emit("info", f"frame rate (externally triggered): {self._preferred:.1f} Hz")
 
     # override
     def getRangeImpl(self):
@@ -256,6 +259,10 @@ class GammaSetting(_models.ValueModel):
     # override
     def isAutoImpl(self):
         return self.DEFAULT_AUTO
+
+    # override
+    def isAutoAvailable(self):
+        return False
 
     # override
     def setAutoImpl(self, status):

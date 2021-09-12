@@ -21,8 +21,17 @@
 # SOFTWARE.
 
 import json as _json
+from traceback import print_exc as _print_exc
 
 from pyqtgraph.Qt import QtCore as _QtCore
+
+def check_error(fun):
+    def _call(*args, **kwargs):
+        try:
+            return fun(*args, **kwargs)
+        except:
+            _print_exc()
+    return _call
 
 class DeviceSetting(_QtCore.QObject):
     message = _QtCore.pyqtSignal(str, str) # level, content
@@ -129,7 +138,9 @@ class ValueModel(DeviceSetting):
         self.rangeChanged.emit(m, M)
 
     def isAuto(self):
-        if self._device is not None:
+        if self.isAutoAvailable() == False:
+            return False
+        elif self._device is not None:
             try:
                 return self.isAutoImpl()
             except RuntimeError as e:
@@ -149,13 +160,13 @@ class ValueModel(DeviceSetting):
 
     def getPreferred(self):
         if self._preferred is not None:
-            return self.getValueImpl()
-        else:
             return self._preferred
+        else:
+            return self.getValueImpl()
 
     def setPreferred(self, value):
-        """the underlying setPreferredImpl() may or may not update the actual value,
-        depending on the mode of the device."""
+        """the underlying setValueImpl() may or may not update the actual value,
+        depending on the mode of the device and the character of the property of interest."""
         self._preferred = value
         if self._device is not None:
             try:
@@ -192,6 +203,10 @@ class ValueModel(DeviceSetting):
             self.fireDriverError(e)
             return self.DEFAULT_RANGE
 
+    def isAutoAvailable(self):
+        """returns if the device supports auto settings."""
+        return True
+
     def isAutoImpl(self):
         """it can be assumed that the device be non-None."""
         raise NotImplementedError("isAutoImpl")
@@ -212,10 +227,10 @@ class ValueModel(DeviceSetting):
         """it can be assumed that the device be non-None, and 'value' be within the range as given by getRangeImpl()."""
         raise NotImplementedError("setValueImpl")
 
-    auto      = property(fget=isAuto, fset=setAuto)
-    value     = property(fget=getValue)
-    range     = property(fget=getRange)
-    preferred = property(fget=getPreferred, fset=setPreferred)
+    auto      = property(fget=check_error(isAuto), fset=check_error(setAuto))
+    value     = property(fget=check_error(getValue))
+    range     = property(fget=check_error(getRange))
+    preferred = property(fget=check_error(getPreferred), fset=check_error(setPreferred))
 
 class SelectionModel(DeviceSetting):
     PARAMETER_LABEL  = None
@@ -296,8 +311,8 @@ class SelectionModel(DeviceSetting):
             self.setValueImpl(value)
             self.fireSelectionChanged()
 
-    options = property(fget=getOptions)
-    value   = property(fget=getValue, fset=setValue)
+    options = property(fget=check_error(getOptions))
+    value   = property(fget=check_error(getValue), fset=check_error(setValue))
 
     def getOptionsImpl(self):
         """it can be assumed that the device be non-None."""
