@@ -257,6 +257,10 @@ class GammaSetting(_models.ValueModel):
         super().__init__(device=device, preferred=preferred, parent=parent)
 
     # override
+    def as_dict(self):
+        return dict(value=self.value)
+
+    # override
     def isAutoImpl(self):
         return self.DEFAULT_AUTO
 
