@@ -22,6 +22,8 @@
 
 import math as _math
 
+from pyqtgraph.Qt import QtCore as _QtCore
+
 from . import models as _models
 from . import utils as _utils
 
@@ -122,8 +124,24 @@ class FrameRateSetting(_models.ValueModel):
     DEFAULT_AUTO         = True # internal triggering
     DEFAULT_VALUE        = 30
 
-    def __init__(self, device=None, preferred=None, parent=None):
+    forcePreferredStatusChanged = _QtCore.pyqtSignal(bool)
+
+    def __init__(self, device=None, preferred=None, parent=None, force_preferred=False):
         super().__init__(device=device, preferred=preferred, parent=parent)
+        self._force_preferred = force_preferred # whether to use the "preferred" value when storing
+
+    def getForcePreferred(self):
+        return self._force_preferred
+
+    def setForcePreferred(self, status):
+        self._force_preferred = bool(status)
+        if self._force_preferred:
+            self.message.emit("info", "set to use the 'preferred rate' on storage")
+        else:
+            self.message.emit("info", "set to use the 'actual rate' on storage")
+        self.forcePreferredStatusChanged.emit(self._force_preferred)
+
+    force_preferred = property(fget=getForcePreferred, fset=setForcePreferred)
 
     # override
     def as_dict(self):
@@ -132,6 +150,7 @@ class FrameRateSetting(_models.ValueModel):
             out["value"] = self.value
         elif self._preferred is not None:
             out["value"] = self._preferred
+        out["force_preferred"] = self._force_preferred
         return out
 
     # override
@@ -140,6 +159,8 @@ class FrameRateSetting(_models.ValueModel):
             self.auto = cfg["auto"]
         if "value" in cfg.keys():
             self.preferred = cfg["value"]
+        if "force_preferred" in cfg.keys():
+            self.force_preferred = cfg["force_preferred"]
 
     # override
     def isAutoImpl(self):

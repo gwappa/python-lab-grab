@@ -380,6 +380,7 @@ class FrameFormatSettings(_utils.ViewGroup):
 class AcquisitionSettings(_utils.ViewGroup):
     requestedAutoTriggerMode  = _QtCore.pyqtSignal(bool)
     requestedFrameRateUpdate  = _QtCore.pyqtSignal(object) # float
+    requestedForcePreferredStatus = _QtCore.pyqtSignal(bool)
     requestedAutoExposureMode = _QtCore.pyqtSignal(bool)
     requestedExposureUpdate   = _QtCore.pyqtSignal(object) # int
     requestedAutoGainMode     = _QtCore.pyqtSignal(bool)
@@ -399,6 +400,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._rate.widget.valueChanged.connect(self.dispatchFrameRateUpdate)
         self._triggered = _QtWidgets.QCheckBox("Use external trigger")
         self._triggered.stateChanged.connect(self.dispatchTriggerStatusUpdate)
+        self._force_preferred = _QtWidgets.QCheckBox("Use 'preferred' frame rate for storage")
+        self._force_preferred.stateChanged.connect(self.dispatchForcePreferredUpdate)
 
         self._strobe   = _utils.FormItem("Strobe output", StrobeModeSelector(session))
 
@@ -440,13 +443,15 @@ class AcquisitionSettings(_utils.ViewGroup):
         self._addFormItem(self._rate, 0, 0)
         self._layout.addWidget(self._triggered, 0, 2,
                                alignment=_QtCore.Qt.AlignLeft)
-        self._addFormItem(self._exposure, 1, 0)
-        self._layout.addWidget(self._autoexp, 1, 2)
-        self._addFormItem(self._gain, 2, 0)
-        self._layout.addWidget(self._autogain, 2, 2)
-        self._addFormItem(self._gamma, 3, 0)
-        self._addFormItem(self._binning, 4, 0)
-        self._addFormItem(self._strobe, 5, 0)
+        self._layout.addWidget(self._force_preferred, 1, 1, 1, 2,
+                               alignment=_QtCore.Qt.AlignLeft)
+        self._addFormItem(self._exposure, 2, 0)
+        self._layout.addWidget(self._autoexp, 2, 2)
+        self._addFormItem(self._gain, 3, 0)
+        self._layout.addWidget(self._autogain, 3, 2)
+        self._addFormItem(self._gamma, 4, 0)
+        self._addFormItem(self._binning, 5, 0)
+        self._addFormItem(self._strobe, 6, 0)
 
         self.setEnabled(False)
 
@@ -458,6 +463,7 @@ class AcquisitionSettings(_utils.ViewGroup):
 
         session.acquisition.framerate.rangeChanged.connect(self.updateWithFrameRateRange)
         session.acquisition.framerate.settingsChanged.connect(self.updateWithFrameRateSettings)
+        session.acquisition.framerate.forcePreferredStatusChanged.connect(self.updateWithForcePreferredStatus)
         session.acquisition.exposure.rangeChanged.connect(self.updateWithExposureRange)
         session.acquisition.exposure.settingsChanged.connect(self.updateWithExposureSettings)
         session.acquisition.gain.rangeChanged.connect(self.updateWithGainRange)
@@ -467,6 +473,7 @@ class AcquisitionSettings(_utils.ViewGroup):
 
         self.requestedAutoTriggerMode.connect(session.acquisition.framerate.setAuto)
         self.requestedFrameRateUpdate.connect(session.acquisition.framerate.setPreferred)
+        self.requestedForcePreferredStatus.connect(session.acquisition.framerate.setForcePreferred)
         self.requestedAutoExposureMode.connect(session.acquisition.exposure.setAuto)
         self.requestedExposureUpdate.connect(session.acquisition.exposure.setPreferred)
         self.requestedAutoGainMode.connect(session.acquisition.gain.setAuto)
@@ -474,7 +481,7 @@ class AcquisitionSettings(_utils.ViewGroup):
         self.requestedGammaUpdate.connect(session.acquisition.gamma.setPreferred)
 
     def setEnabled(self, val):
-        for obj in (self._rate, self._triggered, self._strobe):
+        for obj in (self._rate, self._triggered, self._strobe, self._force_preferred):
             obj.setEnabled(val)
         for obj in (self._exposure, self._autoexp):
             obj.setEnabled(val)
@@ -491,6 +498,11 @@ class AcquisitionSettings(_utils.ViewGroup):
         if (self._updating == True) or (self._rate.widget.editing == True):
             return
         self.requestedFrameRateUpdate.emit(self._rate.widget.value())
+
+    def dispatchForcePreferredUpdate(self):
+        if self._updating == True:
+            return
+        self.requestedForcePreferredStatus.emit(self._force_preferred.isChecked())
 
     def dispatchAutoExposureUpdate(self, _=None): # the argument will never be used
         if self._updating == True:
@@ -548,11 +560,20 @@ class AcquisitionSettings(_utils.ViewGroup):
     def updateWithFrameRateSettings(self, auto, preferred, output):
         self._updating = True
         self._triggered.setChecked(not auto)
-        if auto:
+        if auto and (not self._session.acquisition.framerate.force_preferred):
             self._rate.widget.setValue(output)
         else:
             self._rate.widget.setValue(preferred)
         self._rate.widget.revalidate()
+        self._updating = False
+
+    def updateWithForcePreferredStatus(self, status):
+        self._updating = True
+        self._force_preferred.setChecked(status)
+        if (not status) and (self._session.acquisition.framerate.auto):
+            self._rate.widget.setValue(self._session.acquisition.framerate.value)
+        else:
+            self._rate.widget.setValue(self._session.acquisition.framerate.preferred)
         self._updating = False
 
     def updateWithExposureRange(self, minval, maxval):

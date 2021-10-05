@@ -382,6 +382,7 @@ class StorageService(_QtCore.QObject):
         try:
             stdout, stderr = proc.communicate(timeout=self.DEFAULT_TIMEOUT)
         except TimeoutExpired:
+            self.message.emit("warning", "Possible encoder error: The encoder process did not seem to finish within the expected time window.")
             proc.kill()
             stdout, stderr = proc.communicate()
         return stdout, stderr
