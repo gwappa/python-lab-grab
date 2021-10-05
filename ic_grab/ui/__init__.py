@@ -157,9 +157,8 @@ try:
 
         def __init__(self, title=None, parent=None, show=True):
             super().__init__(parent=parent)
-            if title is None:
-                title = self.DEFAULT_TITLE
-            self.setWindowTitle(title)
+            self._default_title = title if title is not None else self.DEFAULT_TITLE
+
             self.setGeometry(*self.DEFAULT_GEOMETRY)
             self._widget = _QtWidgets.QWidget()
             self._layout = _QtWidgets.QGridLayout()
@@ -169,6 +168,8 @@ try:
             # create control objects
             self._session    = SessionManager()
             self._session.message.connect(self.updateWithMessage)
+            self._session.experiment.updatedDomain.connect(self.updateWithDomain)
+            self._session.control.updatedAcquisitionMode.connect(self.updateWithAcquisitionMode)
 
             self._exp_edit     = views.ExperimentSettings(self._session)
             self._deviceselect = views.DeviceSelector(self._session)
@@ -197,8 +198,34 @@ try:
             self._layout.setRowStretch(4, 5)
             self._layout.setRowStretch(5, 1)
             self.statusBar() # create one
+
+            self.updateWithDomain(self._session.experiment.domain)
             if show == True:
                 self.show()
+
+        def _updateTitle(self, mode='IDLE'):
+            if mode != "IDLE":
+                self.setWindowTitle(f"[{mode}] {self._base_title} ({self.DEFAULT_TITLE})")
+            else:
+                self.setWindowTitle(f"{self._base_title} ({self.DEFAULT_TITLE})")
+
+        def updateWithAcquisitionMode(self, oldmode, newmode):
+            if newmode == utils.AcquisitionModes.IDLE:
+                mode = 'IDLE'
+            elif newmode == utils.AcquisitionModes.GRAB:
+                mode = 'GRAB'
+            elif newmode == utils.AcquisitionModes.FOCUS:
+                mode = 'FOCUS'
+            else:
+                mode = '????'
+            self._updateTitle(mode)
+
+        def updateWithDomain(self, name):
+            if (name is None) or (len(name.strip()) == 0):
+                self._base_title = self._default_title
+            else:
+                self._base_title = name
+            self._updateTitle('IDLE')
 
         def updateWithMessage(self, level, message):
             if level == "info":
