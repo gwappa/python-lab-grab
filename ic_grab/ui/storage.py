@@ -22,7 +22,9 @@
 
 from pathlib import Path as _Path
 from datetime import datetime as _datetime
-from collections import namedtuple as _namedtuple
+from fractions import Fraction as _Fraction
+from collections import namedtuple as _namedtuple, \
+                        deque as _deque
 import subprocess as _sp
 import warnings as _warnings
 import sys as _sys
@@ -30,8 +32,12 @@ import re as _re
 
 import numpy as _np
 from pyqtgraph.Qt import QtCore as _QtCore
+from av import open as _avopen, \
+               VideoFrame as _VideoFrame
 
 from .. import LOGGER as _LOGGER
+
+### encoder-related
 
 def find_command(cmd):
     proc = _sp.run(["where", cmd], shell=True,
@@ -45,29 +51,6 @@ def find_command(cmd):
         _warnings.warn(f"the '{cmd}' command not found")
         return None
     return commands[0]
-
-### ffmpeg-related ###
-
-FFMPEG_PATH  = find_command('ffmpeg')
-BASE_OPTIONS = [
-    "-hide_banner", "-loglevel", "warning", "-stats", # render the command to be (more) quiet
-    "-y", # overwrite by default
-]
-if FFMPEG_PATH is not None:
-    _LOGGER.debug(f"found 'ffmpeg' at: {FFMPEG_PATH}")
-
-def ffmpeg_input_options(width, height, framerate, pixel_format="rgb24"):
-    return [
-        "-f", "rawvideo",
-        "-vcodec", "rawvideo",
-        "-s", f"{width}x{height}",
-        "-pix_fmt", pixel_format,
-        "-r", str(framerate),
-        "-i", "-",
-        "-an", # do not expect any audio
-    ]
-
-### encoder-related
 
 def number_of_nvidia_gpus():
     nvidia_smi = find_command('nvidia-smi')
@@ -156,46 +139,39 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
         return ret
 
     def has_quality_setting(self):
-        return len(self.quality_option(1)) > 0
+        # return len(self.quality_option(1)) > 0
+        return sum(1 for _ in self.quality_option(1)) > 0
 
-    def as_ffmpeg_command(self, outpath, descriptor, framerate=30, quality=75):
-        """returns a list of options used to encode using the ffmpeg command."""
-
-        ## FIXME: how shall we set e.g. the CRF value / bit rate?
-        return [FFMPEG_PATH,] + BASE_OPTIONS \
-                + ffmpeg_input_options(
-                    width=descriptor.width,
-                    height=descriptor.height,
-                    framerate=framerate,
-                    pixel_format=descriptor.pixel_format.ffmpeg_style
-                ) \
-                + [ "-vcodec", self.vcodec ] + self.quality_option(quality) \
-                + [
-                    "-pix_fmt", self.pix_fmt,
-                    str(outpath)
-                ]
-
-    def open_ffmpeg(self, outpath, descriptor, framerate=30, quality=75):
-        """opens and returns a `subprocess.Popen` object
-        corresponding to the encoder process."""
-        return _sp.Popen(self.as_ffmpeg_command(outpath, descriptor, framerate, quality),
-                            stdin=_sp.PIPE)
+    def open_stream(self, outpath, descriptor, framerate=30, quality=75):
+        """returns the PyAV (container, stream) for this encoder."""
+        if isinstance(framerate, int):
+            framerate = _Fraction(str(framerate))
+        else:
+            framerate = _Fraction(f"{framerate:.1f}")
+        container = _avopen(str(outpath), mode="w")
+        stream    = container.add_stream(self.vcodec, rate=framerate,
+                                         options=dict((k, v) for k, v in self.quality_option(quality)))
+        stream.width   = descriptor.width
+        stream.height  = descriptor.height
+        stream.pix_fmt = self.pix_fmt
+        return container, stream
 
 def no_quality_option(value):
     _LOGGER.debug("no quality norm defined")
-    return []
+    yield from ()
 
 def mjpeg_quality_option(value):
     """returns the value from 2 to 31, with a lower value being a higher quality."""
     quality = 31 + round((1 - value) * 29 / 99)
     _LOGGER.debug(f"MJPEG quality norm: {quality}")
-    return [ "-q:v", str(quality) ]
+    yield ("qscale", str(quality))
 
 def h264_nvenc_quality_option(value):
     """try to convert quality from 10 to 43, with a lower value being a higher quality."""
     quality = 43 + round((1 - value) * 33 / 99)
     _LOGGER.debug(f"NVEnc quality norm: {quality}")
-    return [ "-rc:v", "vbr", "-cq:v", str(quality) ]
+    yield ("rc", "vbr")
+    yield ("cq", str(quality))
 
 BASE_ENCODER_LIST = (
     Encoder("Raw video", EncodingDevices.NONE,   ".avi", "rawvideo",   "yuv420p",  no_quality_option),
@@ -205,6 +181,90 @@ BASE_ENCODER_LIST = (
 )
 
 ### the main storage service
+
+class EncodingThread(_QtCore.QThread):
+    def __init__(self,
+                 encoder,
+                 path,
+                 descriptor,
+                 framerate=30,
+                 quality=75,
+                 parent=False):
+        super().__init__(parent=parent)
+        self._container, self._stream  = encoder.open_stream(path,
+                                                             descriptor=descriptor,
+                                                             framerate=framerate,
+                                                             quality=quality)
+        self._pixfmt  = descriptor.pixel_format.ffmpeg_style
+        self._queue   = _deque()
+        self._count   = 0
+        self._mutex   = _QtCore.QMutex()
+        self._signal  = _QtCore.QWaitCondition()
+        self._toquit  = False
+
+    def push(self, frame):
+        """pushes the copy of the frame into the internal FIFO queue.
+        pushing `None` will signal the thread to finish encoding."""
+        self._mutex.lock()
+        try:
+            if frame is None:
+                self._queue.appendleft(None)
+            else:
+                self._queue.appendleft(frame.copy())
+            self._count += 1
+            self._signal.wakeAll()
+        finally:
+            self._mutex.unlock()
+
+    # override
+    def run(self):
+        """runs the storage thread.
+
+        1. waits for the event (either a frame / None is pushed, or signal() is called)
+        2. processes the event:
+            - a frame: encodes it and writes into the stream.
+            - None: finishes the encoding.
+            - signal(): aborts encoding without saving any more frames in the FIFO.
+        """
+        self._mutex.lock()
+        try:
+            while True:
+                if self._count == 0:
+                    self._signal.wait(self._mutex)
+                if self._toquit == True:
+                    self._container.close()
+                    return # DO finally and just return without doing anything more
+
+                # now there should be a frame in the FIFO
+                img = self._queue.pop()
+                self._count -= 1
+                if img is None:
+                    break # GOTO finally and do the rest
+
+                self._mutex.unlock()
+                try:
+                    # encode the frame
+                    for packet in self._stream.encode(_VideoFrame.from_ndarray(img, format=self._pixfmt)):
+                        self._container.mux_one(packet) # NOCHECK isinstance(packet, AVPacket)
+                finally:
+                    self._mutex.lock()
+        finally:
+            self._mutex.unlock()
+
+        # flush stream
+        for packet in self._stream.encode():
+            self._container.mux_one(packet)
+        self._container.close()
+
+    def signal(self):
+        """tell the thread to abort waiting for any more frames.
+        the frames remaining in the FIFO will not be saved."""
+        self._mutex.lock()
+        try:
+            self._toquit = True
+            self._signal.wakeAll()
+        finally:
+            self._mutex.unlock()
 
 class StorageService(_QtCore.QObject):
     EXPERIMENT_ATTRIBUTES = ("subject", "datestr", "indexstr", "domain", "appendagestr")
@@ -336,60 +396,49 @@ class StorageService(_QtCore.QObject):
         return self.DEFAULT_ENCODERS
 
     def prepare(self, framerate=30, descriptor=None):
-        self._proc = self._encoder.open_ffmpeg(self.as_path(self.filename),
-                                               descriptor=descriptor,
-                                               framerate=framerate,
-                                               quality=self._quality)
-        self._sink      = self._proc.stdin
+        self._sink = EncodingThread(self._encoder,
+                                    self.as_path(self.filename),
+                                    descriptor=descriptor,
+                                    framerate=framerate,
+                                    quality=self._quality,
+                                    parent=self)
         self._nextindex = 0
         self._empty     = _np.zeros(**descriptor.numpy_formatter)
         if self._empty.ndim == 3:
             self._convert = lambda frame: frame.transpose((1,0,2))
         else:
             self._convert = lambda frame: frame.T
+        self._sink.start()
 
     def write(self, index, frame):
         try:
             sink = self._sink
             while index > self._nextindex:
-                sink.write(self._empty.tobytes())
+                sink.push(self._empty)
                 self._nextindex += 1
-            sink.write(self._convert(frame).tobytes())
+            sink.push(self._convert(frame))
             self._nextindex += 1
-        except OSError:
-            # some I/O error occurred
-            proc = self._proc
-            if proc is not None:
-                stdout, stderr = self._terminate_safely(proc)
-                msg = '\n'.join(item.decode('utf-8') for item in (stdout, stderr) if item is not None)
-                self.interruptAcquisition.emit(msg)
-                self._proc = None
-                del proc
+        except:
+            sink = self._sink
+            self._sink = None
+            sink.signal()
+            sink.wait()
+            del sink
 
     def close(self):
-        if self._proc is not None:
-            proc = self._proc
-            stdout, stderr = self._terminate_safely(proc)
-            if stdout is not None:
-                print(stdout.decode('utf-8'), file=_sys.stdout, flush=True)
-            if stderr is not None:
-                print(stderr.decode('utf-8'), file=_sys.stderr, flush=True)
-            self._proc = None
-            del proc
-
-    def _terminate_safely(self, proc):
-        # 'safely' terminate the process
-        try:
-            stdout, stderr = proc.communicate(timeout=self.DEFAULT_TIMEOUT)
-        except TimeoutExpired:
-            self.message.emit("warning", "Possible encoder error: The encoder process did not seem to finish within the expected time window.")
-            proc.kill()
-            stdout, stderr = proc.communicate()
-        return stdout, stderr
+        if self._sink is not None:
+            sink = self._sink
+            self._sink = None
+            sink.push(None)
+            if sink.wait() == False:
+                _LOGGER.error("Storage::close -- EncodingThread.wait() returned False")
+                sink.terminate()
+                sink.wait() # do not check
+            del sink
 
     def is_running(self):
         """returns whether the storage service is currently running the encoder process."""
-        return (self._proc is not None)
+        return (self._sink is not None)
 
     @property
     def suffix(self):
