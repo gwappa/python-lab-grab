@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 from pathlib import Path as _Path
+from collections import deque as _deque
 from datetime import datetime as _datetime
 from traceback import print_exc as _print_exc
 import subprocess as _sp
@@ -235,7 +236,13 @@ class StorageService(_QtCore.QObject):
     filename  = property(fget=updateFileName)
 
 class BufferThread(_QtCore.QThread):
-    """the intermediatary buffer between StorageService and encoding.WriterThread."""
+    """the intermediatary buffer between StorageService and encoding.WriterThread.
+
+    The basic principles here are:
+    1. To avoid sharing a single mutex object between the callback and the encoder contexts.
+    2. To avoid dynamic memory allocation related to buffering of frames.
+
+    """
     def __init__(self,
                  options,
                  num_buffer=200,
@@ -255,7 +262,7 @@ class BufferThread(_QtCore.QThread):
         self._in_buf  = 0
         self._use_buf = _QtCore.QMutex()
         for _ in range(num_buffer):
-            self._buffer.append(_np.empty(**descriptor.numpy_formatter))
+            self._buffer.append(_np.empty(**options.descriptor.numpy_formatter))
             self._in_buf += 1
 
         self._writer.start()
@@ -263,31 +270,31 @@ class BufferThread(_QtCore.QThread):
     def push(self, frame):
         """pushes the copy of the frame into the internal FIFO queue.
         pushing `None` will signal the thread to finish encoding."""
-        ## load one buffer frame
-        img = None
-        self._use_buf.lock()
-        try:
-            if self._in_buf == 0:
-                _LOGGER.error("***FATAL*** ran out of buffer!")
-            else:
-                img = self._buffer.pop()
-                self._in_buf -= 1
-        finally:
-            self._use_buf.unlock()
+        if frame is not None:
+            ## load one buffer frame
+            img = None
+            self._use_buf.lock()
+            try:
+                if self._in_buf == 0:
+                    _LOGGER.error("***FATAL*** ran out of buffer!")
+                else:
+                    img = self._buffer.pop()
+                    self._in_buf -= 1
+            finally:
+                self._use_buf.unlock()
 
-        ## copy the content of frame into the buffer frame
-        if img is None:
-            img = frame.copy()
+            ## copy the content of frame into the buffer frame
+            if img is None:
+                img = frame.copy()
+            else:
+                img[:] = frame
         else:
-            img[:] = frame
+            img = None
 
         ## push the buffer frame into the queue
         self._mutex.lock()
         try:
-            if frame is None:
-                self._queue.appendleft(None)
-            else:
-                self._queue.appendleft(img)
+            self._queue.appendleft(img)
             self._count += 1
             self._signal.wakeAll()
         finally:
