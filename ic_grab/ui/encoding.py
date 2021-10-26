@@ -211,14 +211,14 @@ class WriterThread(_QtCore.QThread):
         self._toquit  = False
 
     def push(self, frame):
-        """pushes the copy of the frame into the internal FIFO queue.
+        """pushes the frame (not copied) into the internal FIFO queue.
         pushing `None` will signal the thread to finish encoding."""
         self._mutex.lock()
         try:
             if frame is None:
                 self._queue.appendleft(None)
             else:
-                self._queue.appendleft(frame.copy())
+                self._queue.appendleft(frame) ### CAUTION: NO COPY OCCURS HERE
             self._count += 1
             self._signal.wakeAll()
         finally:

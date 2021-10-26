@@ -175,8 +175,7 @@ class StorageService(_QtCore.QObject):
                                        descriptor=descriptor,
                                        framerate=framerate,
                                        quality=self._quality)
-        self._sink = _encoding.WriterThread(options,
-                                            parent=self)
+        self._sink = BufferThread(options, parent=self)
         self._nextindex = 0
         self._empty     = _np.zeros(**descriptor.numpy_formatter)
         if self._empty.ndim == 3:
@@ -206,7 +205,7 @@ class StorageService(_QtCore.QObject):
             self._sink = None
             sink.push(None)
             if sink.wait() == False:
-                _LOGGER.error("Storage::close -- EncodingThread.wait() returned False")
+                _LOGGER.error("Storage::close -- BufferThread.wait() returned False")
                 sink.terminate()
                 sink.wait() # do not check
             del sink
@@ -234,5 +233,90 @@ class StorageService(_QtCore.QObject):
     directory = property(fget=getDirectory, fset=setDirectory)
     pattern   = property(fget=getPattern,   fset=setPattern)
     filename  = property(fget=updateFileName)
+
+class BufferThread(_QtCore.QThread):
+    """the intermediatary buffer between StorageService and encoding.WriterThread."""
+    def __init__(self,
+                 options,
+                 parent=None):
+        super().__init__(parent=parent)
+        self._writer  = _encoding.WriterThread(options,
+                                               parent=self)
+        self._queue   = _deque()
+        self._count   = 0
+        self._mutex   = _QtCore.QMutex()
+        self._signal  = _QtCore.QWaitCondition()
+        self._toquit  = False
+
+        self._writer.start()
+
+    def push(self, frame):
+        """pushes the copy of the frame into the internal FIFO queue.
+        pushing `None` will signal the thread to finish encoding."""
+        self._mutex.lock()
+        try:
+            if frame is None:
+                self._queue.appendleft(None)
+            else:
+                self._queue.appendleft(frame.copy())
+            self._count += 1
+            self._signal.wakeAll()
+        finally:
+            self._mutex.unlock()
+
+    # override
+    def run(self):
+        """runs the storage thread.
+
+        1. waits for the event (either a frame / None is pushed, or signal() is called)
+        2. processes the event:
+            - a frame: passes it to the writer thread.
+            - None: finishes its intermediatary job.
+            - signal(): aborts encoding without passing any more frames in the FIFO.
+        """
+        try:
+            while True:
+                self._mutex.lock()
+                try:
+                    if self._count == 0:
+                        self._signal.wait(self._mutex)
+                except:
+                    _print_exc()
+                    self._mutex.unlock()
+                    self._writer.push(None)
+                    break # no more while loop
+
+                if self._toquit == True:
+                    self._mutex.unlock()
+                    self._writer.push(None)
+                    break # no more while loop
+
+                # now there should be a frame in the FIFO
+                try:
+                    img = self._queue.pop()
+                    self._count -= 1
+                finally:
+                    self._mutex.unlock()
+
+                # just pass the acquired frame to the writer
+                self._writer.push(img)
+                if img is None:
+                    break # no more while loop (i.e. end of the thread)
+        finally:
+            writer = self._writer
+            if writer.wait() == False:
+                _LOGGER.error("BufferThread::run -- EncodingThread.wait() returned False")
+                writer.terminate()
+                writer.wait() # do not check
+
+    def signal(self):
+        """tell the thread to abort waiting for any more frames.
+        the frames remaining in the FIFO will not be saved."""
+        self._mutex.lock()
+        try:
+            self._toquit = True
+            self._signal.wakeAll()
+        finally:
+            self._mutex.unlock()
 
 from .experiment import Experiment as _Experiment
