@@ -238,9 +238,11 @@ class BufferThread(_QtCore.QThread):
     """the intermediatary buffer between StorageService and encoding.WriterThread."""
     def __init__(self,
                  options,
+                 num_buffer=200,
                  parent=None):
         super().__init__(parent=parent)
         self._writer  = _encoding.WriterThread(options,
+                                               buffer=self,
                                                parent=self)
         self._queue   = _deque()
         self._count   = 0
@@ -248,21 +250,58 @@ class BufferThread(_QtCore.QThread):
         self._signal  = _QtCore.QWaitCondition()
         self._toquit  = False
 
+        ## frame buffer
+        self._buffer  = _deque()
+        self._in_buf  = 0
+        self._use_buf = _QtCore.QMutex()
+        for _ in range(num_buffer):
+            self._buffer.append(_np.empty(**descriptor.numpy_formatter))
+            self._in_buf += 1
+
         self._writer.start()
 
     def push(self, frame):
         """pushes the copy of the frame into the internal FIFO queue.
         pushing `None` will signal the thread to finish encoding."""
+        ## load one buffer frame
+        img = None
+        self._use_buf.lock()
+        try:
+            if self._in_buf == 0:
+                _LOGGER.error("***FATAL*** ran out of buffer!")
+            else:
+                img = self._buffer.pop()
+                self._in_buf -= 1
+        finally:
+            self._use_buf.unlock()
+
+        ## copy the content of frame into the buffer frame
+        if img is None:
+            img = frame.copy()
+        else:
+            img[:] = frame
+
+        ## push the buffer frame into the queue
         self._mutex.lock()
         try:
             if frame is None:
                 self._queue.appendleft(None)
             else:
-                self._queue.appendleft(frame.copy())
+                self._queue.appendleft(img)
             self._count += 1
             self._signal.wakeAll()
         finally:
             self._mutex.unlock()
+
+    def recycle(self, frame):
+        """returns the used buffered frame back to the frame buffer.
+        normally, this method is called from within the encoder thread."""
+        self._use_buf.lock()
+        try:
+            self._buffer.append(frame)
+            self._in_buf += 1
+        finally:
+            self._use_buf.unlock()
 
     # override
     def run(self):

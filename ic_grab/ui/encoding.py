@@ -201,8 +201,10 @@ class Options(_namedtuple("_options", ("encoder", "path", "descriptor", "framera
 class WriterThread(_QtCore.QThread):
     def __init__(self,
                  options,
+                 buffer=None,
                  parent=None):
         super().__init__(parent=parent)
+        self._buffer  = buffer
         self._container, self._stream, self._pixfmt  = options.open_stream()
         self._queue   = _deque()
         self._count   = 0
@@ -263,6 +265,8 @@ class WriterThread(_QtCore.QThread):
                 # encode the frame
                 for packet in self._stream.encode(_VideoFrame.from_ndarray(img, format=self._pixfmt)):
                     self._container.mux_one(packet) # NOCHECK isinstance(packet, AVPacket)
+                if self._buffer is not None:
+                    self._buffer.recycle(img)
             except:
                 _print_exc()
                 break # no more while loop
