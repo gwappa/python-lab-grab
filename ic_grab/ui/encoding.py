@@ -26,8 +26,11 @@ import subprocess as _sp
 import warnings as _warnings
 from fractions import Fraction as _Fraction
 from collections import namedtuple as _namedtuple
+from collections import deque as _deque
 
 from av import open as _avopen
+from av import VideoFrame as _VideoFrame
+from pyqtgraph.Qt import QtCore as _QtCore
 
 from .. import LOGGER as _LOGGER
 
@@ -172,3 +175,109 @@ RAW_VIDEO  = Encoder("Raw video", Devices.NONE,   ".avi", "rawvideo",   "yuv420p
 MJPEG_CPU  = Encoder("MJPEG",     Devices.CPU,    ".avi", "mjpeg",      "yuvj420p", mjpeg_quality_option)
 MJPEG_QSV  = Encoder("MJPEG",     Devices.QSV,    ".avi", "mjpeg_qsv",  "yuvj420p", mjpeg_quality_option)
 H264_NVENC = Encoder("H.264",     Devices.NVIDIA, ".avi", "h264_nvenc", "yuv420p",  h264_nvenc_quality_option)
+
+class Options(_namedtuple("_options", ("encoder", "path", "descriptor", "framerate", "quality"))):
+    def __new__(cls,
+                encoder=None,
+                path=None,
+                descriptor=None,
+                framerate=30,
+                quality=75):
+        return super(Options, cls).__new__(cls,
+                                           encoder=encoder,
+                                           path=path,
+                                           descriptor=descriptor,
+                                           framerate=framerate,
+                                           quality=quality)
+
+    def open_stream(self):
+        """returns (container, stream, frame_format)"""
+        container, stream = self.encoder.open_stream(self.path,
+                                                     descriptor=self.descriptor,
+                                                     framerate=self.framerate,
+                                                     quality=self.quality)
+        return container, stream, self.descriptor.pixel_format.ffmpeg_style
+
+class WriterThread(_QtCore.QThread):
+    def __init__(self,
+                 options,
+                 parent=None):
+        super().__init__(parent=parent)
+        self._container, self._stream, self._pixfmt  = options.open_stream()
+        self._queue   = _deque()
+        self._count   = 0
+        self._mutex   = _QtCore.QMutex()
+        self._signal  = _QtCore.QWaitCondition()
+        self._toquit  = False
+
+    def push(self, frame):
+        """pushes the copy of the frame into the internal FIFO queue.
+        pushing `None` will signal the thread to finish encoding."""
+        self._mutex.lock()
+        try:
+            if frame is None:
+                self._queue.appendleft(None)
+            else:
+                self._queue.appendleft(frame.copy())
+            self._count += 1
+            self._signal.wakeAll()
+        finally:
+            self._mutex.unlock()
+
+    # override
+    def run(self):
+        """runs the storage thread.
+
+        1. waits for the event (either a frame / None is pushed, or signal() is called)
+        2. processes the event:
+            - a frame: encodes it and writes into the stream.
+            - None: finishes the encoding.
+            - signal(): aborts encoding without saving any more frames in the FIFO.
+        """
+        while True:
+            self._mutex.lock()
+            try:
+                if self._count == 0:
+                    self._signal.wait(self._mutex)
+            except:
+                _print_exc()
+                self._mutex.unlock()
+                break # no more while loop
+
+            if self._toquit == True:
+                self._container.close()
+                self._mutex.unlock()
+                return # just return without doing anything more
+
+            # now there should be a frame in the FIFO
+            try:
+                img = self._queue.pop()
+                self._count -= 1
+            finally:
+                self._mutex.unlock()
+
+            if img is None:
+                break # no more while loop
+
+            try:
+                # encode the frame
+                for packet in self._stream.encode(_VideoFrame.from_ndarray(img, format=self._pixfmt)):
+                    self._container.mux_one(packet) # NOCHECK isinstance(packet, AVPacket)
+            except:
+                _print_exc()
+                break # no more while loop
+
+        # flush stream
+        for packet in self._stream.encode():
+            self._container.mux_one(packet)
+        self._container.close()
+
+    def signal(self):
+        """tell the thread to abort waiting for any more frames.
+        the frames remaining in the FIFO will not be saved."""
+        self._mutex.lock()
+        try:
+            self._toquit = True
+            self._signal.wakeAll()
+        finally:
+            self._mutex.unlock()

@@ -22,111 +22,16 @@
 
 from pathlib import Path as _Path
 from datetime import datetime as _datetime
-from collections import deque as _deque
 from traceback import print_exc as _print_exc
 import subprocess as _sp
 
 import numpy as _np
 from pyqtgraph.Qt import QtCore as _QtCore
-from av import VideoFrame as _VideoFrame
 
 from .. import LOGGER as _LOGGER
 from . import encoding as _encoding
 
 ### the main storage service
-
-class EncodingThread(_QtCore.QThread):
-    def __init__(self,
-                 encoder,
-                 path,
-                 descriptor,
-                 framerate=30,
-                 quality=75,
-                 parent=False):
-        super().__init__(parent=parent)
-        self._container, self._stream  = encoder.open_stream(path,
-                                                             descriptor=descriptor,
-                                                             framerate=framerate,
-                                                             quality=quality)
-        self._pixfmt  = descriptor.pixel_format.ffmpeg_style
-        self._queue   = _deque()
-        self._count   = 0
-        self._mutex   = _QtCore.QMutex()
-        self._signal  = _QtCore.QWaitCondition()
-        self._toquit  = False
-
-    def push(self, frame):
-        """pushes the copy of the frame into the internal FIFO queue.
-        pushing `None` will signal the thread to finish encoding."""
-        self._mutex.lock()
-        try:
-            if frame is None:
-                self._queue.appendleft(None)
-            else:
-                self._queue.appendleft(frame.copy())
-            self._count += 1
-            self._signal.wakeAll()
-        finally:
-            self._mutex.unlock()
-
-    # override
-    def run(self):
-        """runs the storage thread.
-
-        1. waits for the event (either a frame / None is pushed, or signal() is called)
-        2. processes the event:
-            - a frame: encodes it and writes into the stream.
-            - None: finishes the encoding.
-            - signal(): aborts encoding without saving any more frames in the FIFO.
-        """
-        while True:
-            self._mutex.lock()
-            try:
-                if self._count == 0:
-                    self._signal.wait(self._mutex)
-            except:
-                _print_exc()
-                self._mutex.unlock()
-                break # no more while loop
-
-            if self._toquit == True:
-                self._container.close()
-                self._mutex.unlock()
-                return # just return without doing anything more
-
-            # now there should be a frame in the FIFO
-            try:
-                img = self._queue.pop()
-                self._count -= 1
-            finally:
-                self._mutex.unlock()
-
-            if img is None:
-                break # no more while loop
-
-            try:
-                # encode the frame
-                for packet in self._stream.encode(_VideoFrame.from_ndarray(img, format=self._pixfmt)):
-                    self._container.mux_one(packet) # NOCHECK isinstance(packet, AVPacket)
-            except:
-                _print_exc()
-                break # no more while loop
-
-        # flush stream
-        for packet in self._stream.encode():
-            self._container.mux_one(packet)
-        self._container.close()
-
-    def signal(self):
-        """tell the thread to abort waiting for any more frames.
-        the frames remaining in the FIFO will not be saved."""
-        self._mutex.lock()
-        try:
-            self._toquit = True
-            self._signal.wakeAll()
-        finally:
-            self._mutex.unlock()
-
 
 BASE_ENCODER_LIST = (
     _encoding.RAW_VIDEO,
@@ -265,12 +170,13 @@ class StorageService(_QtCore.QObject):
         return self.DEFAULT_ENCODERS
 
     def prepare(self, framerate=30, descriptor=None):
-        self._sink = EncodingThread(self._encoder,
-                                    self.as_path(self.filename),
-                                    descriptor=descriptor,
-                                    framerate=framerate,
-                                    quality=self._quality,
-                                    parent=self)
+        options    = _encoding.Options(self._encoder,
+                                       self.as_path(self.filename),
+                                       descriptor=descriptor,
+                                       framerate=framerate,
+                                       quality=self._quality)
+        self._sink = _encoding.WriterThread(options,
+                                            parent=self)
         self._nextindex = 0
         self._empty     = _np.zeros(**descriptor.numpy_formatter)
         if self._empty.ndim == 3:
