@@ -165,7 +165,6 @@ def QSV_is_available():
     outfile = testdir / "qsvtest.avi"
     if outfile.exists():
         outfile.unlink() # just in case
-    _LOGGER.info("start testing the QSV functionality...")
     try:
         proc    = _sp.run([FFMPEG_PATH,] + BASE_OPTIONS + \
                           ["-f", "image2",
@@ -173,12 +172,12 @@ def QSV_is_available():
                            "-i", str(filepat),
                            "-r", "1",
                            "-c:v", "mjpeg_qsv",
-                           str(outfile)])
+                           str(outfile)], capture_output=True)
         if outfile.exists():
             status = "output file is generated"
         else:
             status = "output file does not exist"
-        _LOGGER.info(f"QSV functionality test: ffmpeg returned code {proc.returncode}; {status}")
+        _LOGGER.info(f"testing QSV functionality: ffmpeg returned code {proc.returncode}; {status}")
         return (proc.returncode == 0) and outfile.exists()
     except:
         from traceback import print_exc
