@@ -25,7 +25,7 @@ import argparse as _ap
 
 import tisgrabber as _tisgrabber
 
-__VERSION__ = "0.4.0.2021102801"
+__VERSION__ = "0.4.0.2021102803"
 
 _logging.basicConfig(level=_logging.INFO,
                      format="[%(asctime)s %(name)s] %(levelname)s: %(message)s")

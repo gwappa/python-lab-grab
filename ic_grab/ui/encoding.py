@@ -28,8 +28,6 @@ from fractions import Fraction as _Fraction
 from collections import namedtuple as _namedtuple
 from collections import deque as _deque
 
-from av import open as _avopen
-from av import VideoFrame as _VideoFrame
 from pyqtgraph.Qt import QtCore as _QtCore
 
 from .. import LOGGER as _LOGGER
@@ -49,7 +47,52 @@ def find_command(cmd):
         return None
     return commands[0]
 
-def number_of_nvidia_gpus():
+class NvidiaGPU(_namedtuple("_NvidiaGPU", ("index", "name", "uuid"))):
+    NAME_PATTERN = _re.compile(r"GPU (\d+): ([a-zA-Z0-9 -]+) \(UUID: ([a-zA-Z0-9-]+)\)")
+    THREADS_PER_CORE = 3
+    from . import nvenc as NVENC
+
+    @classmethod
+    def parse(cls, line):
+        matches = cls.NAME_PATTERN.match(line.strip())
+        if not matches:
+            _LOGGER.warning(f"failed to parse: {line.strip()}")
+            return cls(-1, "<unknown>", "0")
+        index = int(matches.group(1))
+        name  = str(matches.group(2))
+        uuid  = str(matches.group(3))
+        return cls(index, name, uuid)
+
+    def has_nvenc_h264(self):
+        if ("Quadro" in self.name) or ("NVS" in self.name) or ("Tesla" in self.name):
+            ## FIXME
+            _LOGGER.warning("note that having this type of GPUs does not ascertain the availability of NVEnc functionality: " \
+                         "check the list of supported GPUs at: https://developer.nvidia.com/video-encode-and-decode-gpu-support-matrix-new")
+            return True
+        elif self.name in self.NVENC.NONE.keys():
+            _LOGGER.warning(f"{self.name} appears to have no NVENC core.")
+            return False
+        elif self.name in self.NVENC.AMBIG.keys():
+            _LOGGER.warning(f"unable to determine whether {self.name} has an NVENC core. NVENC functionality may not work properly.")
+            return True
+        elif self.name not in self.NVENC.COMPAT.keys():
+            _LOGGER.warning(f"{self.name} is not registered in the list of NVENC-compatible NVIDIA cores. This may mean the core is either too old or too new. Consult the developer if you think it is a bug.")
+            return False
+        else:
+            n_cores = [self.NVENC.NVENC_CORES_H264.get(coretype, 0) for coretype in self.NVENC.COMPAT[self.name]]
+            min_cores = min(n_cores)
+            max_cores = max(n_cores)
+            if min_cores == max_cores:
+                _LOGGER.info(f"{self.name}: number of NVENC cores: {max_cores} " \
+                             f"(up to {max_cores*self.THREADS_PER_CORE} simultaneous encoding)")
+            else:
+                _LOGGER.info(f"{self.name}: number of NVENC cores: {min_cores}-{max_cores}" \
+                             f"(depends; possibly up to {max_cores*self.THREADS_PER_CORE} simultaneous encoding)")
+            if min_cores == 0:
+                _LOGGER.warning(f"note that {self.name} may _not_ have an NVENC-compatible core, and the functionality may not work properly.")
+            return max_cores > 0
+
+def number_of_nvenc_gpus():
     nvidia_smi = find_command('nvidia-smi')
     if nvidia_smi is None:
         return 0  # cannot detect NVIDA driver
@@ -84,11 +127,13 @@ def number_of_nvidia_gpus():
         _warnings.warn(f"failed to list up available GPUs: 'nvidia-smi' returned code {proc.returncode} ({err})")
         return 0
 
-    GPUs = [item.strip() for item in proc.stdout.decode().split("\n") if len(item.strip()) > 0]
-    _LOGGER.info(f"number of NVIDIA GPUs available: {len(GPUs)}")
-    ## FIXME
-    _LOGGER.warn("note that having a GPU does not ascertain the availability of NVEnc functionality: check the list of supported GPUs at: https://developer.nvidia.com/video-encode-and-decode-gpu-support-matrix-new")
-    return len(GPUs)
+    GPUs = [NvidiaGPU.parse(item.strip()) for item in proc.stdout.decode().split("\n") if len(item.strip()) > 0]
+    if len(GPUs) > 0:
+        names = f" ({', '.join(core.name for core in GPUs)})"
+    else:
+        names = ""
+    _LOGGER.info(f"number of NVIDIA GPUs available: {len(GPUs)}{names}")
+    return len([core for core in GPUs if core.has_nvenc_h264()])
 
 ### ffmpeg-related ###
 
@@ -110,6 +155,37 @@ def ffmpeg_input_options(width, height, framerate, pixel_format="rgb24"):
         "-i", "-",
         "-an", # do not expect any audio
     ]
+
+def QSV_is_available():
+    if FFMPEG_PATH is None:
+        return False # no meaning in asking the question
+    from pathlib import Path
+    testdir = Path(__file__).resolve().parent
+    filepat = testdir / "qsvtest" / "%03d.jpg"
+    outfile = testdir / "qsvtest.avi"
+    if outfile.exists():
+        outfile.unlink() # just in case
+    try:
+        proc    = _sp.run([FFMPEG_PATH,] + BASE_OPTIONS + \
+                          ["-f", "image2",
+                           "-framerate", "1",
+                           "-i", str(filepat),
+                           "-r", "1",
+                           "-c:v", "mjpeg_qsv",
+                           str(outfile)])
+        if outfile.exists():
+            status = "output file is generated"
+        else:
+            status = "output file does not exist"
+        _LOGGER.info(f"testing QSV functionality: ffmpeg returned code {proc.returncode}; {status}")
+        return (proc.returncode == 0) and outfile.exists()
+    except:
+        from traceback import print_exc
+        print_exc()
+        return False
+    finally:
+        if outfile.exists():
+            outfile.unlink()
 
 ### encoding-related classes
 
@@ -137,11 +213,9 @@ class Devices:
         elif device == cls.CPU:
             return True
         elif device == cls.QSV:
-            # FIXME
-            _LOGGER.warning("the current version of the program cannot detect the availability of Intel QSV. the option is disabled.")
-            return False
+            return QSV_is_available()
         elif device == cls.NVIDIA:
-            return (number_of_nvidia_gpus() > 0)
+            return (number_of_nvenc_gpus() > 0)
         else:
             _LOGGER.warning("unknown encoder device name: " + device)
             return False
