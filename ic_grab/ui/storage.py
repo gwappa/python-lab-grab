@@ -45,7 +45,6 @@ class StorageService(_QtCore.QObject):
     EXPERIMENT_ATTRIBUTES = ("subject", "datestr", "indexstr", "domain", "appendagestr")
     TIMESTAMP_FORMAT      = "%H%M%S"
     DEFAULT_NAME_PATTERN  = "{subject}_{date}_{domain}_{time}{appendage}"
-    DEFAULT_TIMEOUT       = 3.0
     QUALITY_RANGE         = (1, 100)
 
     DEFAULT_ENCODERS = tuple(enc for enc in BASE_ENCODER_LIST if _encoding.Devices.available(enc.device))

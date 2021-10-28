@@ -90,6 +90,29 @@ def number_of_nvidia_gpus():
     _LOGGER.warn("note that having a GPU does not ascertain the availability of NVEnc functionality: check the list of supported GPUs at: https://developer.nvidia.com/video-encode-and-decode-gpu-support-matrix-new")
     return len(GPUs)
 
+### ffmpeg-related ###
+
+FFMPEG_PATH  = find_command('ffmpeg')
+BASE_OPTIONS = [
+    "-hide_banner", "-loglevel", "warning", "-stats", # render the command to be (more) quiet
+    "-y", # overwrite by default
+]
+if FFMPEG_PATH is not None:
+    _LOGGER.debug(f"found 'ffmpeg' at: {FFMPEG_PATH}")
+
+def ffmpeg_input_options(width, height, framerate, pixel_format="rgb24"):
+    return [
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-s", f"{width}x{height}",
+        "-pix_fmt", pixel_format,
+        "-r", str(framerate),
+        "-i", "-",
+        "-an", # do not expect any audio
+    ]
+
+### encoding-related classes
+
 class Devices:
     NONE   = "None"
     CPU    = "CPU"
@@ -139,36 +162,44 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
         # return len(self.quality_option(1)) > 0
         return sum(1 for _ in self.quality_option(1)) > 0
 
-    def open_stream(self, outpath, descriptor, framerate=30, quality=75):
-        """returns the PyAV (container, stream) for this encoder."""
-        if isinstance(framerate, int):
-            framerate = _Fraction(str(framerate))
-        else:
-            framerate = _Fraction(f"{framerate:.1f}")
-        container = _avopen(str(outpath), mode="w")
-        stream    = container.add_stream(self.vcodec, rate=framerate,
-                                         options=dict((k, v) for k, v in self.quality_option(quality)))
-        stream.width   = descriptor.width
-        stream.height  = descriptor.height
-        stream.pix_fmt = self.pix_fmt
-        return container, stream
+    def as_ffmpeg_command(self, outpath, descriptor, framerate=30, quality=75):
+        """returns a list of options used to encode using the ffmpeg command."""
+
+        ## FIXME: how shall we set e.g. the CRF value / bit rate?
+        return [FFMPEG_PATH,] + BASE_OPTIONS \
+                + ffmpeg_input_options(
+                    width=descriptor.width,
+                    height=descriptor.height,
+                    framerate=framerate,
+                    pixel_format=descriptor.pixel_format.ffmpeg_style
+                ) \
+                + [ "-vcodec", self.vcodec ] + self.quality_option(quality) \
+                + [
+                    "-pix_fmt", self.pix_fmt,
+                    str(outpath)
+                ]
+
+    def open_ffmpeg(self, outpath, descriptor, framerate=30, quality=75):
+        """opens and returns a `subprocess.Popen` object
+        corresponding to the encoder process."""
+        return _sp.Popen(self.as_ffmpeg_command(outpath, descriptor, framerate, quality),
+                            stdin=_sp.PIPE)
 
 def no_quality_option(value):
     _LOGGER.debug("no quality norm defined")
-    yield from ()
+    return []
 
 def mjpeg_quality_option(value):
     """returns the value from 2 to 31, with a lower value being a higher quality."""
     quality = 31 + round((1 - value) * 29 / 99)
     _LOGGER.debug(f"MJPEG quality norm: {quality}")
-    yield ("qscale", str(quality))
+    return [ "-q:v", str(quality) ]
 
 def h264_nvenc_quality_option(value):
     """try to convert quality from 10 to 43, with a lower value being a higher quality."""
     quality = 43 + round((1 - value) * 33 / 99)
     _LOGGER.debug(f"NVEnc quality norm: {quality}")
-    yield ("rc", "vbr")
-    yield ("cq", str(quality))
+    return [ "-rc:v", "vbr", "-cq:v", str(quality) ]
 
 
 RAW_VIDEO  = Encoder("Raw video", Devices.NONE,   ".avi", "rawvideo",   "yuv420p",  no_quality_option)
@@ -191,21 +222,23 @@ class Options(_namedtuple("_options", ("encoder", "path", "descriptor", "framera
                                            quality=quality)
 
     def open_stream(self):
-        """returns (container, stream, frame_format)"""
-        container, stream = self.encoder.open_stream(self.path,
-                                                     descriptor=self.descriptor,
-                                                     framerate=self.framerate,
-                                                     quality=self.quality)
-        return container, stream, self.descriptor.pixel_format.ffmpeg_style
+        """returns (process, stream)"""
+        proc = self.encoder.open_ffmpeg(self.path,
+                                        descriptor=self.descriptor,
+                                        framerate=self.framerate,
+                                        quality=self.quality)
+        return proc, proc.stdin
 
 class WriterThread(_QtCore.QThread):
+    DEFAULT_TIMEOUT       = 3.0
+
     def __init__(self,
                  options,
                  buffer=None,
                  parent=None):
         super().__init__(parent=parent)
         self._buffer  = buffer
-        self._container, self._stream, self._pixfmt  = options.open_stream()
+        self._proc, self._sink = options.open_stream()
         self._queue   = _deque()
         self._count   = 0
         self._mutex   = _QtCore.QMutex()
@@ -262,19 +295,31 @@ class WriterThread(_QtCore.QThread):
                 break # no more while loop
 
             try:
-                # encode the frame
-                for packet in self._stream.encode(_VideoFrame.from_ndarray(img, format=self._pixfmt)):
-                    self._container.mux_one(packet) # NOCHECK isinstance(packet, AVPacket)
-                if self._buffer is not None:
-                    self._buffer.recycle(img)
+                self._sink.write(img.tobytes())
+                self._buffer.recycle(img)
             except:
                 _print_exc()
                 break # no more while loop
 
-        # flush stream
-        for packet in self._stream.encode():
-            self._container.mux_one(packet)
-        self._container.close()
+        # close the pipe
+        proc = self._proc
+        stdout, stderr = self._terminate_safely(proc)
+        if stdout is not None:
+            print(stdout.decode('utf-8'), file=_sys.stdout, flush=True)
+        if stderr is not None:
+            print(stderr.decode('utf-8'), file=_sys.stderr, flush=True)
+        self._proc = None
+        del proc
+
+    def _terminate_safely(self, proc):
+        # 'safely' terminate the process
+        try:
+            stdout, stderr = proc.communicate(timeout=self.DEFAULT_TIMEOUT)
+        except TimeoutExpired:
+            _LOGGER.error("The encoder process did not seem to finish within the expected time window.")
+            proc.kill()
+            stdout, stderr = proc.communicate()
+        return stdout, stderr
 
     def signal(self):
         """tell the thread to abort waiting for any more frames.
