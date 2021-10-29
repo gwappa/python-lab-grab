@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name='ks-ic-grab',
-    version="0.4.0",
+    version="0.4.1",
     description='a grabber for ImagingSource cameras equipped with the optional NVenc encoder.',
     url='https://github.com/gwappa/python-IC-grab',
     author='Keisuke Sehara',
@@ -19,9 +19,9 @@ setuptools.setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
         ],
-    packages=['ic_grab',],
+    packages=setuptools.find_packages(),
     package_data={
-        'ic_grab': ["ui/qsvtest/*.jpg"],
+        'ic_grab.ui': ["qsvtest/*.jpg"],
     },
     entry_points={
         'console_scripts': [ 'ic-grab=ic_grab:parse_commandline', ],
