@@ -20,120 +20,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import re as _re
-
 import subprocess as _sp
-import warnings as _warnings
-from fractions import Fraction as _Fraction
 from collections import namedtuple as _namedtuple
 from collections import deque as _deque
 
 from pyqtgraph.Qt import QtCore as _QtCore
 
 from .. import LOGGER as _LOGGER
-
-### encoder-related
-
-def find_command(cmd):
-    proc = _sp.run(["where", cmd], shell=True,
-                   capture_output=True)
-    if proc.returncode != 0:
-        _warnings.warn(f"failed to find the '{cmd}' command: 'where' returned code {proc.returncode}")
-        return None
-
-    commands = [item.strip() for item in proc.stdout.decode().split("\n")]
-    if len(commands) == 0:
-        _warnings.warn(f"the '{cmd}' command not found")
-        return None
-    return commands[0]
-
-### ffmpeg-related ###
-
-FFMPEG_PATH  = find_command('ffmpeg')
-BASE_OPTIONS = [
-    "-hide_banner", "-loglevel", "warning", "-stats", # render the command to be (more) quiet
-    "-y", # overwrite by default
-]
-if FFMPEG_PATH is not None:
-    _LOGGER.debug(f"found 'ffmpeg' at: {FFMPEG_PATH}")
-
-def ffmpeg_input_options(width, height, framerate, pixel_format="rgb24"):
-    return [
-        "-f", "rawvideo",
-        "-vcodec", "rawvideo",
-        "-s", f"{width}x{height}",
-        "-pix_fmt", pixel_format,
-        "-r", str(framerate),
-        "-i", "-",
-        "-an", # do not expect any audio
-    ]
-
-def encoding_succeeds(codec):
-    if FFMPEG_PATH is None:
-        return False # no meaning in asking the question
-    from pathlib import Path
-    testdir = Path(__file__).resolve().parent
-    filepat = testdir / "enctest" / "%03d.jpg"
-    outfile = testdir / "enctest.avi"
-    if outfile.exists():
-        outfile.unlink() # just in case
-    try:
-        proc    = _sp.run([FFMPEG_PATH,] + BASE_OPTIONS + \
-                          ["-f", "image2",
-                           "-framerate", "1",
-                           "-i", str(filepat),
-                           "-r", "1",
-                           "-c:v", str(codec),
-                           str(outfile)], capture_output=True)
-        if outfile.exists():
-            status = "output file is generated"
-        else:
-            status = "output file does not exist"
-        _LOGGER.info(f"testing encoder '{codec}': ffmpeg returned code {proc.returncode}; {status}")
-        if proc.returncode != 0:
-            for line in proc.stderr.decode().split("\n"):
-                _LOGGER.error(line.strip())
-        return (proc.returncode == 0) and outfile.exists()
-    except:
-        from traceback import print_exc
-        print_exc()
-        return False
-    finally:
-        if outfile.exists():
-            outfile.unlink()
-
-### encoding-related classes
+from .. import backends as _backends
 
 class Devices:
     NONE   = "None"
     CPU    = "CPU"
     QSV    = "Intel-QSV CPU"
     NVIDIA = "NVIDIA GPU"
-
-    _availability = dict()
-
-    @classmethod
-    def available(cls, device):
-        device = str(device)
-        if device not in cls._availability.keys():
-            cls._availability[device] = cls.check_availability(device)
-        return cls._availability[device]
-
-    @classmethod
-    def check_availability(cls, device):
-        """explicitly check the availability of the device."""
-        device = str(device)
-        if device == cls.NONE:
-            return True
-        elif device == cls.CPU:
-            return True
-        elif device == cls.QSV:
-            return encoding_succeeds("mjpeg_qsv")
-        elif device == cls.NVIDIA:
-            return encoding_succeeds("h264_nvenc")
-        else:
-            _LOGGER.warning("unknown encoder device name: " + device)
-            return False
 
 class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pix_fmt", "quality_option"))):
     @property
@@ -148,7 +48,7 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
         return ret
 
     def check_availability(self):
-        return encoding_succeeds(self.vcodec)
+        return _backends.test_decoder(self.vcodec)
 
     def has_quality_setting(self):
         # return len(self.quality_option(1)) > 0
@@ -158,8 +58,8 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
         """returns a list of options used to encode using the ffmpeg command."""
 
         ## FIXME: how shall we set e.g. the CRF value / bit rate?
-        return [FFMPEG_PATH,] + BASE_OPTIONS \
-                + ffmpeg_input_options(
+        return _backends.ffmpeg_command(with_base_options=True) \
+                + _backends.ffmpeg_input_options(
                     width=descriptor.width,
                     height=descriptor.height,
                     framerate=framerate,
@@ -290,7 +190,8 @@ class WriterThread(_QtCore.QThread):
                 self._sink.write(img.tobytes())
                 self._buffer.recycle(img)
             except:
-                _print_exc()
+                from traceback import print_exc
+                print_exc()
                 break # no more while loop
 
         # close the pipe
