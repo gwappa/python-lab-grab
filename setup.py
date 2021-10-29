@@ -21,7 +21,7 @@ setuptools.setup(
         ],
     packages=setuptools.find_packages(),
     package_data={
-        'ic_grab.ui': ["qsvtest/*.jpg"],
+        'ic_grab.ui': ["enctest/*.jpg"],
     },
     entry_points={
         'console_scripts': [ 'ic-grab=ic_grab:parse_commandline', ],
