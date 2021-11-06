@@ -74,7 +74,10 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
         # TODO: set transform to fit the image to the rect
 
     def updateWithFrameRateSettings(self, auto, preferred, actual):
-        self._every = round(actual / self.TARGET_REFRESH)
+        if self.TARGET_REFRESH < actual:
+            self._every = round(actual / self.TARGET_REFRESH)
+        else:
+            self._every = 1
 
     def updateWithFrame(self, frame_index, frame):
         self._count += 1
