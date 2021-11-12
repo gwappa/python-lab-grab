@@ -46,6 +46,7 @@ class StorageService(_QtCore.QObject):
     TIMESTAMP_FORMAT      = "%H%M%S"
     DEFAULT_NAME_PATTERN  = "{subject}_{date}_{domain}_{time}{appendage}"
     QUALITY_RANGE         = (1, 100)
+    DEFAULT_TIMEOUT       = 3.0
 
     DEFAULT_ENCODERS = tuple(enc for enc in BASE_ENCODER_LIST if enc.check_availability())
 
@@ -177,30 +178,42 @@ class StorageService(_QtCore.QObject):
                                        rotation=rotation,
                                        framerate=framerate,
                                        quality=self._quality)
-        ## FIXME: probably we don't need a buffer on the output side anymore... or do we?
-        self._sink = BufferThread(options, parent=self)
+        self._proc, self._sink = options.open_stream()
         if descriptor.ndim == 3:
             self._convert = lambda frame: frame.transpose((1,0,2))
         else:
             self._convert = lambda frame: frame.T
-        self._sink.start()
 
     def write(self, frame):
         ## works as a callback
         ## frame can be assumed to be non-None
         ## the shape of the frame is supposed to be "after rotation"
-        self._sink.push(self._convert(frame))
+        self._sink.write(self._convert(frame).tobytes())
 
     def close(self):
         if self._sink is not None:
+            # close the pipe
+            proc = self._proc
+            stdout, stderr = self._terminate_safely(proc)
+            if stdout is not None:
+                print(stdout.decode('utf-8'), file=_sys.stdout, flush=True)
+            if stderr is not None:
+                print(stderr.decode('utf-8'), file=_sys.stderr, flush=True)
+            self._proc = None
+            del proc
             sink = self._sink
             self._sink = None
-            sink.push(None)
-            if sink.wait() == False:
-                _LOGGER.error("Storage::close -- BufferThread.wait() returned False")
-                sink.terminate()
-                sink.wait() # do not check
             del sink
+
+    def _terminate_safely(self, proc):
+        # 'safely' terminate the process
+        try:
+            stdout, stderr = proc.communicate(timeout=self.DEFAULT_TIMEOUT)
+        except TimeoutExpired:
+            _LOGGER.error("The encoder process did not seem to finish within the expected time window.")
+            proc.kill()
+            stdout, stderr = proc.communicate()
+        return stdout, stderr
 
     def is_running(self):
         """returns whether the storage service is currently running the encoder process."""
@@ -225,135 +238,5 @@ class StorageService(_QtCore.QObject):
     directory = property(fget=getDirectory, fset=setDirectory)
     pattern   = property(fget=getPattern,   fset=setPattern)
     filename  = property(fget=updateFileName)
-
-class BufferThread(_QtCore.QThread):
-    """the intermediatary buffer between StorageService and encoding.WriterThread.
-
-    The basic principles here are:
-    1. To avoid sharing a single mutex object between the callback and the encoder contexts.
-    2. To avoid dynamic memory allocation related to buffering of frames.
-
-    """
-    def __init__(self,
-                 options,
-                 num_buffer=200,
-                 parent=None):
-        super().__init__(parent=parent)
-        self._writer  = _encoding.WriterThread(options,
-                                               buffer=self,
-                                               parent=self)
-        self._queue   = _deque()
-        self._count   = 0
-        self._mutex   = _QtCore.QMutex()
-        self._signal  = _QtCore.QWaitCondition()
-        self._toquit  = False
-
-        ## frame buffer
-        self._buffer  = _deque()
-        self._in_buf  = 0
-        self._use_buf = _QtCore.QMutex()
-        for _ in range(num_buffer):
-            self._buffer.append(_np.empty(**options.descriptor.numpy_formatter))
-            self._in_buf += 1
-
-        self._writer.start()
-
-    def push(self, frame):
-        """pushes the copy of the frame into the internal FIFO queue.
-        pushing `None` will signal the thread to finish encoding."""
-        if frame is not None:
-            ## load one buffer frame
-            img = None
-            self._use_buf.lock()
-            try:
-                if self._in_buf == 0:
-                    _LOGGER.error("***FATAL*** ran out of buffer!")
-                else:
-                    img = self._buffer.pop()
-                    self._in_buf -= 1
-            finally:
-                self._use_buf.unlock()
-
-            ## copy the content of frame into the buffer frame
-            if img is None:
-                img = frame.copy()
-            else:
-                img[:] = frame
-        else:
-            img = None
-
-        ## push the buffer frame into the queue
-        self._mutex.lock()
-        try:
-            self._queue.appendleft(img)
-            self._count += 1
-            self._signal.wakeAll()
-        finally:
-            self._mutex.unlock()
-
-    def recycle(self, frame):
-        """returns the used buffered frame back to the frame buffer.
-        normally, this method is called from within the encoder thread."""
-        self._use_buf.lock()
-        try:
-            self._buffer.append(frame)
-            self._in_buf += 1
-        finally:
-            self._use_buf.unlock()
-
-    # override
-    def run(self):
-        """runs the storage thread.
-
-        1. waits for the event (either a frame / None is pushed, or signal() is called)
-        2. processes the event:
-            - a frame: passes it to the writer thread.
-            - None: finishes its intermediatary job.
-            - signal(): aborts encoding without passing any more frames in the FIFO.
-        """
-        try:
-            while True:
-                self._mutex.lock()
-                try:
-                    if self._count == 0:
-                        self._signal.wait(self._mutex)
-                except:
-                    _print_exc()
-                    self._mutex.unlock()
-                    self._writer.push(None)
-                    break # no more while loop
-
-                if self._toquit == True:
-                    self._mutex.unlock()
-                    self._writer.push(None)
-                    break # no more while loop
-
-                # now there should be a frame in the FIFO
-                try:
-                    img = self._queue.pop()
-                    self._count -= 1
-                finally:
-                    self._mutex.unlock()
-
-                # just pass the acquired frame to the writer
-                self._writer.push(img)
-                if img is None:
-                    break # no more while loop (i.e. end of the thread)
-        finally:
-            writer = self._writer
-            if writer.wait() == False:
-                _LOGGER.error("BufferThread::run -- EncodingThread.wait() returned False")
-                writer.terminate()
-                writer.wait() # do not check
-
-    def signal(self):
-        """tell the thread to abort waiting for any more frames.
-        the frames remaining in the FIFO will not be saved."""
-        self._mutex.lock()
-        try:
-            self._toquit = True
-            self._signal.wakeAll()
-        finally:
-            self._mutex.unlock()
 
 from .experiment import Experiment as _Experiment

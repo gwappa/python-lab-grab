@@ -119,7 +119,7 @@ class DeviceControl(_QtCore.QObject):
                 if mode == _utils.AcquisitionModes.FOCUS:
                     n_buffers = 1
                 else: # GRAB
-                    n_buffers = int(device.frame_rate)
+                    n_buffers = int(device.frame_rate) * 10
                 device.prepare(buffer_size=n_buffers)
 
             self._rotation_method = self._acq.rotation.method
