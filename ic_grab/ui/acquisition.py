@@ -383,3 +383,10 @@ class FrameRotationSetting(_models.SelectionModel):
     @property
     def method(self):
         return _utils.FrameRotation.get(self._value)
+
+    def transform_shape(self, shape):
+        """transform the shape tuple (H, W, C) according to the rotation setting."""
+        if self.value in ("90", "270"):
+            return (shape[1], shape[0],) + shape[2:]
+        else:
+            return shape

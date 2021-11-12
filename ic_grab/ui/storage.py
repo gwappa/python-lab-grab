@@ -169,29 +169,28 @@ class StorageService(_QtCore.QObject):
     def list_encoders(self):
         return self.DEFAULT_ENCODERS
 
-    def prepare(self, framerate=30, descriptor=None):
+    def prepare(self, framerate=30, descriptor=None, rotation=None):
+        ## the shape of the frame is "before rotation"
         options    = _encoding.Options(self._encoder,
                                        self.as_path(self.filename),
                                        descriptor=descriptor,
+                                       rotation=rotation,
                                        framerate=framerate,
                                        quality=self._quality)
+        ## FIXME: probably we don't need a buffer on the output side anymore... or do we?
         self._sink = BufferThread(options, parent=self)
-        self._nextindex = 0
-        self._empty     = _np.zeros(**descriptor.numpy_formatter)
         if self._empty.ndim == 3:
             self._convert = lambda frame: frame.transpose((1,0,2))
         else:
             self._convert = lambda frame: frame.T
         self._sink.start()
 
-    def write(self, index, frame):
+    def write(self, frame):
+        ## works as a callback
+        ## frame can be assumed to be non-None
+        ## the shape of the frame is supposed to be "after rotation"
         try:
-            sink = self._sink
-            while index > self._nextindex:
-                sink.push(self._empty)
-                self._nextindex += 1
-            sink.push(self._convert(frame))
-            self._nextindex += 1
+            self._sink.push(self._convert(frame))
         except:
             sink = self._sink
             self._sink = None
