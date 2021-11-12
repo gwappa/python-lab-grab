@@ -26,7 +26,7 @@ setuptools.setup(
     name='ks-lab-grab',
     version="0.5.0",
     description='a grabber for ImagingSource cameras equipped with the optional NVenc encoder.',
-    url='https://github.com/gwappa/python-IC-grab',
+    url='https://github.com/gwappa/python-lab-grab',
     author='Keisuke Sehara',
     author_email='keisuke.sehara@gmail.com',
     license='MIT',
