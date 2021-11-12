@@ -172,10 +172,10 @@ class ValueModel(DeviceSetting):
             try:
                 m, M = self.getRange()
                 if m > value:
-                    self.message("warning", f"Value {value} is below the minimum acceptable {self.PARAMETER_LABEL}.")
+                    self.message.emit("warning", f"Value {value} is below the minimum acceptable {self.PARAMETER_LABEL}.")
                     value = m
                 elif M < value:
-                    self.message("warning", f"Value {value} is above the maximum acceptable {self.PARAMETER_LABEL}.")
+                    self.message.emit("warning", f"Value {value} is above the maximum acceptable {self.PARAMETER_LABEL}.")
                     value = M
                 self.setValueImpl(value)
             except RuntimeError as e:

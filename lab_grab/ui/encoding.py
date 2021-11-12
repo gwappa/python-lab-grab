@@ -58,12 +58,13 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
         """returns a list of options used to encode using the ffmpeg command."""
         ## TODO: deal with rotation KS211112
         ## FIXME: how shall we set e.g. the CRF value / bit rate?
+        shape = rotation.transform_shape(descriptor.shape)
         return _backends.ffmpeg_command(with_base_options=True) \
                 + _backends.ffmpeg_input_options(
-                    width=descriptor.width,
-                    height=descriptor.height,
+                    width=descriptor.shape[1],
+                    height=descriptor.shape[0],
                     framerate=framerate,
-                    pixel_format=descriptor.pixel_format.ffmpeg_style
+                    pixel_format=descriptor.color_format.ffmpeg_style
                 ) \
                 + [ "-vcodec", self.vcodec ] + self.quality_option(quality) \
                 + [
@@ -111,7 +112,7 @@ class Options(_namedtuple("_options", ("encoder", "path", "descriptor", "rotatio
                                            encoder=encoder,
                                            path=path,
                                            descriptor=descriptor,
-                                           rotation=None,
+                                           rotation=rotation,
                                            framerate=framerate,
                                            quality=quality)
 

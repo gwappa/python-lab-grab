@@ -24,6 +24,7 @@ from pyqtgraph.Qt import QtCore as _QtCore
 import labcamera_tis as _tis
 
 from . import utils as _utils
+from .. import LOGGER as _LOGGER
 
 class DeviceControl(_QtCore.QObject):
     """deals with opening/closing of the device, its acquisition modes,
@@ -116,7 +117,7 @@ class DeviceControl(_QtCore.QObject):
             # prepare the device
             if not device.is_setup():
                 if mode == _utils.AcquisitionModes.FOCUS:
-                    n_buffers = 0
+                    n_buffers = 1
                 else: # GRAB
                     n_buffers = int(device.frame_rate)
                 device.prepare(buffer_size=n_buffers)
@@ -140,6 +141,7 @@ class DeviceControl(_QtCore.QObject):
 
     def _frameReadyCallback(self, frame):
         if frame is None:
-            self.acquisitionEnded().emit()
+            _LOGGER.info("None frame detected")
+            self.acquisitionEnded.emit()
         else:
             self.frameReady.emit(self._rotation_method(frame))

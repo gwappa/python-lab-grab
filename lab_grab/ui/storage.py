@@ -179,7 +179,7 @@ class StorageService(_QtCore.QObject):
                                        quality=self._quality)
         ## FIXME: probably we don't need a buffer on the output side anymore... or do we?
         self._sink = BufferThread(options, parent=self)
-        if self._empty.ndim == 3:
+        if descriptor.ndim == 3:
             self._convert = lambda frame: frame.transpose((1,0,2))
         else:
             self._convert = lambda frame: frame.T
@@ -189,14 +189,7 @@ class StorageService(_QtCore.QObject):
         ## works as a callback
         ## frame can be assumed to be non-None
         ## the shape of the frame is supposed to be "after rotation"
-        try:
-            self._sink.push(self._convert(frame))
-        except:
-            sink = self._sink
-            self._sink = None
-            sink.signal()
-            sink.wait()
-            del sink
+        self._sink.push(self._convert(frame))
 
     def close(self):
         if self._sink is not None:
