@@ -67,7 +67,9 @@ def test_decoder(codec):
         _LOGGER.info(f"testing encoder '{codec}': ffmpeg returned code {proc.returncode}; {status}")
         if proc.returncode != 0:
             for line in proc.stderr.decode().split("\n"):
-                _LOGGER.error(line.strip())
+                line = line.strip()
+                if len(line) > 0:
+                    _LOGGER.error(line)
         return (proc.returncode == 0) and outfile.exists()
     except:
         from traceback import print_exc
