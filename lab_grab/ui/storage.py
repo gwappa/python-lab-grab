@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 from pathlib import Path as _Path
-from collections import deque as _deque
 from datetime import datetime as _datetime
 from traceback import print_exc as _print_exc
 import subprocess as _sp
@@ -30,7 +29,7 @@ import numpy as _np
 from pyqtgraph.Qt import QtCore as _QtCore
 
 from .. import LOGGER as _LOGGER
-from . import encoding as _encoding
+from .. import encoding as _encoding
 
 ### the main storage service
 

@@ -22,12 +22,9 @@
 
 import subprocess as _sp
 from collections import namedtuple as _namedtuple
-from collections import deque as _deque
 
-from pyqtgraph.Qt import QtCore as _QtCore
-
-from .. import LOGGER as _LOGGER
-from .. import backends as _backends
+from . import LOGGER as _LOGGER
+from . import backends as _backends
 
 class Devices:
     NONE   = "None"
