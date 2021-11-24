@@ -61,8 +61,8 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
         shape = rotation.transform_shape(descriptor.shape)
         return _backends.ffmpeg_command(with_base_options=True) \
                 + _backends.ffmpeg_input_options(
-                    width=descriptor.shape[1],
-                    height=descriptor.shape[0],
+                    width=shape[1],
+                    height=shape[0],
                     framerate=framerate,
                     pixel_format=descriptor.color_format.ffmpeg_style
                 ) \

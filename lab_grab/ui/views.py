@@ -70,7 +70,16 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
     def prepareForAcquisition(self, desc, rotation, store_frames=None):
         dims = rotation.transform_shape(desc.shape)
         self._scene.setSceneRect(_QtCore.QRectF(0.0, 0.0, float(dims[1]), float(dims[0])))
-        self._image.setImage(_np.zeros(dims, dtype=desc.dtype))
+        img = _np.zeros(dims, dtype=desc.dtype)
+        if desc.dtype == _np.uint8:
+            self._levels = (0, 255)
+        elif desc.dtype == _np.uint16:
+            self._levels = (0, 65535)
+        else:
+            self._levels = None
+        self._image.setImage(img, autoLevels=(self._levels is None))
+        if self._levels:
+            self._image.setLevels(self._levels)
         self._count = 0
         # TODO: set transform to fit the image to the rect
 
@@ -85,7 +94,7 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
         ## frame is "after rotation"
         self._count += 1
         if self._count == self._every:
-            self._image.setImage(frame)
+            self._image.setImage(frame, autoLevels=(self._levels is None))
             self._count = 0
 
 class ExperimentSettings(_utils.ViewGroup):
