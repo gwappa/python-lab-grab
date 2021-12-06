@@ -179,6 +179,7 @@ class StorageService(_QtCore.QObject):
                                        quality=self._quality)
         self._sink = BufferThread(options, parent=self)
         self._nextindex = 0
+        self._dropped   = 0
         self._empty     = _np.zeros(**descriptor.numpy_formatter)
         if self._empty.ndim == 3:
             self._convert = lambda frame: frame.transpose((1,0,2))
@@ -191,6 +192,7 @@ class StorageService(_QtCore.QObject):
             sink = self._sink
             while index > self._nextindex:
                 sink.push(self._empty)
+                self._dropped   += 1
                 self._nextindex += 1
             sink.push(self._convert(frame))
             self._nextindex += 1
@@ -211,6 +213,7 @@ class StorageService(_QtCore.QObject):
                 sink.terminate()
                 sink.wait() # do not check
             del sink
+        _LOGGER.info(f"seems to have dropped {self._dropped} frames")
 
     def is_running(self):
         """returns whether the storage service is currently running the encoder process."""
