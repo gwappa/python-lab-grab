@@ -29,8 +29,10 @@ import subprocess as _sp
 import numpy as _np
 from pyqtgraph.Qt import QtCore as _QtCore
 
-from .. import LOGGER as _LOGGER
+from .. import logger as _logger
 from . import encoding as _encoding
+
+_LOGGER = _logger()
 
 ### the main storage service
 

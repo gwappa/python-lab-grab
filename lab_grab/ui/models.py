@@ -24,6 +24,9 @@ import json as _json
 from traceback import print_exc as _print_exc
 
 from pyqtgraph.Qt import QtCore as _QtCore
+from .. import logger as _logger
+
+_LOGGER = _logger()
 
 def check_error(fun):
     def _call(*args, **kwargs):
@@ -33,19 +36,26 @@ def check_error(fun):
             _print_exc()
     return _call
 
+NAME_UNKNOWN = "(unknown)"
+
 class DeviceSetting(_QtCore.QObject):
     message = _QtCore.pyqtSignal(str, str) # level, content
 
-    def __init__(self, device=None, parent=None):
+    def __init__(self, name=NAME_UNKNOWN, device=None, parent=None):
         super().__init__(parent=parent)
+        self._name      = name
         self._device    = device
 
     def fireDriverError(self, e):
         """emits message() corresponding to the driver error."""
+        _LOGGER.debug(f"driver error in '{self.name}': {e}")
         self.message.emit("error", f"Driver error: {e}")
 
     def getCurrentDevice(self):
         return self._device
+
+    def getSettingName(self):
+        return self._name
 
     def updateWithDevice(self, device):
         self._device = device
@@ -60,6 +70,7 @@ class DeviceSetting(_QtCore.QObject):
         raise NotImplementedError(f"{self.__class__.__name__}.load_dict")
 
     device = property(fget=getCurrentDevice, fset=updateWithDevice)
+    name   = property(fget=getSettingName)
 
 class ValueModel(DeviceSetting):
     """signal/slot-aware model of a setting.
@@ -102,8 +113,8 @@ class ValueModel(DeviceSetting):
     DEFAULT_VALUE        = None
     DEFAULT_RANGE        = None
 
-    def __init__(self, device=None, preferred=None, parent=None):
-        super().__init__(device=device, parent=parent)
+    def __init__(self, name=NAME_UNKNOWN, device=None, preferred=None, parent=None):
+        super().__init__(name=name, device=device, parent=parent)
         self._preferred = preferred
 
     def as_dict(self):
@@ -118,8 +129,12 @@ class ValueModel(DeviceSetting):
             return out
 
     def load_dict(self, cfg):
-        self.auto = cfg["auto"]
+        _LOGGER.debug(f"loading '{self.name}' from config")
+        if "auto" in cfg.keys():
+            _LOGGER.debug(f"config for '{self.name}': auto-setting found ({cfg['auto']})")
+            self.auto = cfg["auto"]
         if "preferred" in cfg.keys():
+            _LOGGER.debug(f"config for '{self.name}': preferred value found ({cfg['preferred']})")
             self.preferred = cfg["preferred"]
 
     # override
@@ -130,39 +145,51 @@ class ValueModel(DeviceSetting):
 
     def fireSettingsChanged(self):
         """fires the settingsChanged event with the current settings (auto/preferred/value)."""
+        _LOGGER.debug(f"value of '{self.name}' changed to: {self.preferred} (actual: {self.value}, auto: {self.auto})")
         self.settingsChanged.emit(self.auto, self.preferred, self.value)
 
     def fireRangeChanged(self):
         """fires the rangeChanged event with the current valid range."""
         m, M = self.getRange()
+        _LOGGER.debug(f"range of '{self.name}' changed to: ({m}, {M})")
         self.rangeChanged.emit(m, M)
 
     def isAuto(self):
-        if self.isAutoAvailable() == False:
+        try:
+            if self.isAutoAvailable() == False:
+                return False
+            elif self._device is not None:
+                try:
+                    return self.isAutoImpl()
+                except RuntimeError as e:
+                    self.fireDriverError(e)
+            else:
+                return self.DEFAULT_AUTO
+        except BaseException as e:
+            _LOGGER.info(f"isAuto() failed for '{self.name}': {e}")
             return False
-        elif self._device is not None:
-            try:
-                return self.isAutoImpl()
-            except RuntimeError as e:
-                self.fireDriverError(e)
-        else:
-            return self.DEFAULT_AUTO
 
     def setAuto(self, auto):
+        if self.isAutoAvailable() == False:
+            _LOGGER.debug(f"attempted to set 'auto' for '{self.name}', which does not have the 'auto' property")
         if self._device is None:
             self.message.emit("warning", f"Device not open: attempted to set {self.AUTO_PARAMETER_LABEL} without opening the device.")
             return
         try:
             self.setAutoImpl(bool(auto))
             self.fireSettingsChanged()
-        except RuntimeError as e:
+        except BaseException as e:
             self.fireDriverError(e)
 
     def getPreferred(self):
-        if self._preferred is not None:
-            return self._preferred
-        else:
-            return self.getValueImpl()
+        try:
+            if self._preferred is not None:
+                return self._preferred
+            else:
+                return self.getValueImpl()
+        except BaseException as e:
+            _LOGGER.info(f"getPreferred() failed for '{self.name}': {e}")
+            return self.DEFAULT_VALUE
 
     def setPreferred(self, value):
         """the underlying setValueImpl() may or may not update the actual value,
@@ -178,7 +205,7 @@ class ValueModel(DeviceSetting):
                     self.message.emit("warning", f"Value {value} is above the maximum acceptable {self.PARAMETER_LABEL}.")
                     value = M
                 self.setValueImpl(value)
-            except RuntimeError as e:
+            except BaseException as e:
                 self.fireDriverError(e)
         self.fireSettingsChanged()
 
@@ -189,7 +216,7 @@ class ValueModel(DeviceSetting):
         else:
             try:
                 return self.getValueImpl()
-            except RuntimeError as e:
+            except BaseException as e:
                 self.fireDriverError(e)
                 return self.DEFAULT_VALUE
 
@@ -199,7 +226,7 @@ class ValueModel(DeviceSetting):
             return self.DEFAULT_RANGE
         try:
             return self.getRangeImpl()
-        except RuntimeError as e:
+        except BaseException as e:
             self.fireDriverError(e)
             return self.DEFAULT_RANGE
 
@@ -241,14 +268,16 @@ class SelectionModel(DeviceSetting):
     selectionChanged = _QtCore.pyqtSignal(str)
     optionsChanged   = _QtCore.pyqtSignal(tuple)
 
-    def __init__(self, device=None, parent=None):
-        super().__init__(device=device, parent=parent)
+    def __init__(self, name=NAME_UNKNOWN, device=None, parent=None):
+        super().__init__(name=name, device=device, parent=parent)
 
     def as_dict(self):
         return dict(value=self.value)
 
     def load_dict(self, cfg):
+        _LOGGER.debug(f"loading '{self.name}' from config")
         if "value" in cfg.keys():
+            _LOGGER.debug(f"config for '{self.name}': value found ({cfg['value']})")
             self.value = cfg["value"]
 
     # override
@@ -258,9 +287,11 @@ class SelectionModel(DeviceSetting):
             self.fireSelectionChanged()
 
     def fireOptionsChanged(self):
+        _LOGGER.debug(f"option '{self.name}' changed its options: {self.options}")
         self.optionsChanged.emit(self.options)
 
     def fireSelectionChanged(self):
+        _LOGGER.debug(f"selection changed for '{self.name}': {self.value}")
         self.selectionChanged.emit(self.value)
 
     def getOptions(self):

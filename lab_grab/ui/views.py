@@ -31,7 +31,9 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
 import tisgrabber as _tisgrabber
 
 from . import utils as _utils
-from .. import LOGGER as _LOGGER
+from .. import logger as _logger
+
+_LOGGER = _logger()
 
 class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
     INITIAL_DIMS   = (640, 480)

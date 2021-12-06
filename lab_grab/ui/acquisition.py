@@ -27,6 +27,10 @@ from pyqtgraph.Qt import QtCore as _QtCore
 from . import models as _models
 from . import utils as _utils
 
+from .. import logger as _logger
+
+_LOGGER = _logger()
+
 class AcquisitionSettings(_models.DeviceSetting):
     def __init__(self, device=None, parent=None):
         super().__init__(device=device, parent=parent)
@@ -86,6 +90,7 @@ class AcquisitionSettings(_models.DeviceSetting):
             if not key in cfg.keys():
                 # do not attempt to configure this component
                 continue
+            _LOGGER.debug(f" --- config '{key}' --- ")
             component.load_dict(cfg[key])
 
     @property
@@ -127,7 +132,7 @@ class FrameRateSetting(_models.ValueModel):
     forcePreferredStatusChanged = _QtCore.pyqtSignal(bool)
 
     def __init__(self, device=None, preferred=None, parent=None, force_preferred=False):
-        super().__init__(device=device, preferred=preferred, parent=parent)
+        super().__init__(name="rate", device=device, preferred=preferred, parent=parent)
         self._force_preferred = force_preferred # whether to use the "preferred" value when storing
 
     def getForcePreferred(self):
@@ -155,12 +160,19 @@ class FrameRateSetting(_models.ValueModel):
 
     # override
     def load_dict(self, cfg):
-        if "auto" in cfg.keys():
-            self.auto = cfg["auto"]
-        if "value" in cfg.keys():
-            self.preferred = cfg["value"]
-        if "force_preferred" in cfg.keys():
-            self.force_preferred = cfg["force_preferred"]
+        try:
+            _LOGGER.debug(f"loading '{self.name}' from config")
+            if "auto" in cfg.keys():
+                _LOGGER.debug(f"config for '{self.name}': auto-setting found ({cfg['auto']})")
+                self.auto = cfg["auto"]
+            if "value" in cfg.keys():
+                _LOGGER.debug(f"config for '{self.name}': value found ({cfg['value']})")
+                self.preferred = cfg["value"]
+            if "force_preferred" in cfg.keys():
+                _LOGGER.debug(f"config for '{self.name}': force-preferred setting found ({cfg['force_preferred']})")
+                self.force_preferred = cfg["force_preferred"]
+        except BaseException as e:
+            _LOGGER.info(f"load_dict() failed for '{self.name}': {e}")
 
     # override
     def isAutoImpl(self):
@@ -202,7 +214,7 @@ class ExposureSetting(_models.ValueModel):
     DEFAULT_VALUE        = 33000 # 33 ms, for 30 Hz acquisition
 
     def __init__(self, device=None, preferred=None, parent=None):
-        super().__init__(device=device, preferred=preferred, parent=parent)
+        super().__init__(name="exposure", device=device, preferred=preferred, parent=parent)
 
     # override
     def isAutoImpl(self):
@@ -238,7 +250,7 @@ class GainSetting(_models.ValueModel):
     DEFAULT_VALUE        = 1
 
     def __init__(self, device=None, preferred=None, parent=None):
-        super().__init__(device=device, preferred=preferred, parent=parent)
+        super().__init__(name="gain", device=device, preferred=preferred, parent=parent)
 
     # override
     def isAutoImpl(self):
@@ -275,7 +287,7 @@ class GammaSetting(_models.ValueModel):
     DEFAULT_VALUE        = 1
 
     def __init__(self, device=None, preferred=None, parent=None):
-        super().__init__(device=device, preferred=preferred, parent=parent)
+        super().__init__(name="gamma", device=device, preferred=preferred, parent=parent)
 
     # override
     def as_dict(self):
@@ -314,7 +326,7 @@ class StrobeSetting(_models.SelectionModel):
     DEFAULT_VALUE    = _utils.StrobeModes.DISABLED
 
     def __init__(self, device=None, parent=None):
-        super().__init__(device=device, parent=parent)
+        super().__init__(name="strobe", device=device, parent=parent)
         self._value = self.DEFAULT_VALUE
 
     # override
@@ -335,7 +347,7 @@ class FrameFormatSetting(_models.SelectionModel):
     READ_FROM_DEVICE = True
 
     def __init__(self, device=None, parent=None):
-        super().__init__(device=device, parent=parent)
+        super().__init__(name="format", device=device, parent=parent)
         self._value = None
 
     # override
@@ -363,7 +375,7 @@ class FrameRotationSetting(_models.SelectionModel):
     DEFAULT_VALUE    = "0"
 
     def __init__(self, device=None, parent=None):
-        super().__init__(device=device, parent=parent)
+        super().__init__(name="rotation", device=device, parent=parent)
         self._value = self.DEFAULT_VALUE
 
     # override

@@ -25,23 +25,43 @@ import argparse as _ap
 
 import tisgrabber as _tisgrabber
 
-__VERSION__ = "0.6.0.2021120601"
-
-_logging.basicConfig(level=_logging.INFO,
-                     format="[%(asctime)s %(name)s] %(levelname)s: %(message)s")
-
-LOGGER = _logging.getLogger(__name__)
-LOGGER.setLevel(_logging.INFO)
+__VERSION__  = "0.6.0.2021120602"
 
 PARSER = _ap.ArgumentParser(description="grabs videos from an ImagingSource camera.")
-PARSER.add_argument("device", nargs='?', default=None,
-                    help="the 'unique name' of the device as it shows up on the device selection dialog.")
+PARSER.add_argument("--debug", action="store_true",
+                    help="enables the debug-level logging.")
+
+LOGGER = None
+DEBUG  = False
+
+def init_logger():
+    global LOGGER
+    level = _logging.DEBUG if DEBUG == True else _logging.INFO
+    _logging.basicConfig(level=level,
+                         format="[%(asctime)s %(name)s] %(levelname)s: %(message)s")
+    LOGGER = _logging.getLogger(__name__)
+    LOGGER.setLevel(level)
+
+def logger():
+    global LOGGER
+    if LOGGER is None:
+        init_logger()
+    return LOGGER
 
 def parse_commandline():
     run(**vars(PARSER.parse_args()))
 
-def run(device=None):
-    LOGGER.info(f"ic-grab version {__VERSION__}")
+def run(debug=False):
+    global DEBUG
+    if debug == True:
+        DEBUG = True
+    init_logger()
+
+    LOGGER.info(f"lab-grab version {__VERSION__}")
+    if DEBUG == True:
+        LOGGER.info("")
+        LOGGER.info("  ========== DEBUG MODE ==========  ")
+        LOGGER.info("")
     from . import ui
     main = ui.MainWindow()
     # TODO: attempt to open the device in case it is not None

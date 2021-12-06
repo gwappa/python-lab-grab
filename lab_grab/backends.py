@@ -2,7 +2,9 @@ import warnings as _warnings
 import re as _re
 import subprocess as _sp
 
-from . import LOGGER as _LOGGER
+from . import logger as _logger
+
+_LOGGER = _logger()
 
 def find_command(cmd):
     proc = _sp.run(["where", cmd], shell=True,

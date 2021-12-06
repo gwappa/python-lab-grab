@@ -24,7 +24,9 @@ from pathlib import Path as _Path
 from datetime import datetime as _datetime
 import json as _json
 
-from .. import LOGGER as _LOGGER
+from .. import logger as _logger
+
+_LOGGER = _logger()
 
 try:
     from pyqtgraph.Qt import QtCore as _QtCore, \

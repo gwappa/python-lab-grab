@@ -27,7 +27,9 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
 
-from .. import LOGGER as _LOGGER
+from .. import logger as _logger
+
+_LOGGER = _logger()
 
 def image_to_display(img):
     if img.ndim == 3:
