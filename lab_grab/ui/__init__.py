@@ -152,7 +152,7 @@ try:
                 pass
 
     class MainWindow(_QtWidgets.QMainWindow):
-        DEFAULT_TITLE    = "IC-GRAB"
+        DEFAULT_TITLE    = "lab-grab"
         DEFAULT_GEOMETRY = (100, 100, 1200, 720) # X, Y, W, H
 
         def __init__(self, title=None, parent=None, show=True):
