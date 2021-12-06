@@ -736,7 +736,7 @@ class StorageSettings(_utils.ViewGroup):
 
     def updateWithDirectory(self, value):
         self._updating = True
-        self._directory.value = value
+        self._directory.widget.value = value
         self._updating = False
 
     def updateWithPattern(self, value):
