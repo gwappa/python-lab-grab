@@ -46,6 +46,7 @@ class AcquisitionSettings(_models.DeviceSetting):
         # to 'raise' the message events from its children altogether
         for _, component in self.items():
             component.message.connect(self.handleMessageFromChild)
+        self.format.selectionChanged.connect(self.updateWithFormat)
 
     def items(self):
         return (
@@ -60,6 +61,11 @@ class AcquisitionSettings(_models.DeviceSetting):
 
     def handleMessageFromChild(self, level, content):
         self.message.emit(level, content)
+
+    def updateWithFormat(self, fmt):
+        for key, component in self.items():
+            if key != "frame-format":
+                component.updateWithDevice(self.device)
 
     # override
     def updateWithDeviceImpl(self, device):
