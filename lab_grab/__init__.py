@@ -38,7 +38,8 @@ def init_logger():
     global LOGGER
     level = _logging.DEBUG if DEBUG == True else _logging.INFO
     _logging.basicConfig(level=level,
-                         format="[%(asctime)s %(name)s] %(levelname)s: %(message)s")
+                         format="[%(asctime)s %(name)s] %(levelname)s: %(message)s",
+                         datefmt="%Y-%m-%d %H:%M:%S")
     LOGGER = _logging.getLogger(__name__)
     LOGGER.setLevel(level)
 
