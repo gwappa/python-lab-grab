@@ -30,7 +30,7 @@ import numpy as _np
 from pyqtgraph.Qt import QtCore as _QtCore
 
 from .. import logger as _logger
-from . import encoding as _encoding
+from .. import encoding as _encoding
 
 _LOGGER = _logger()
 
@@ -171,31 +171,27 @@ class StorageService(_QtCore.QObject):
     def list_encoders(self):
         return self.DEFAULT_ENCODERS
 
-    def prepare(self, framerate=30, descriptor=None):
+    def prepare(self,
+                framerate=30,
+                descriptor=None,
+                rotation=None):
         options    = _encoding.Options(self._encoder,
                                        self.as_path(self.filename),
                                        descriptor=descriptor,
                                        framerate=framerate,
+                                       rotation=rotation,
                                        quality=self._quality)
         self._sink = BufferThread(options, parent=self)
-        self._nextindex = 0
         self._dropped   = 0
-        self._empty     = _np.zeros(**descriptor.numpy_formatter)
-        if self._empty.ndim == 3:
+        if descriptor.ndim == 3:
             self._convert = lambda frame: frame.transpose((1,0,2))
         else:
             self._convert = lambda frame: frame.T
         self._sink.start()
 
-    def write(self, index, frame):
+    def write(self, frame):
         try:
-            sink = self._sink
-            while index > self._nextindex:
-                sink.push(self._empty)
-                self._dropped   += 1
-                self._nextindex += 1
-            sink.push(self._convert(frame))
-            self._nextindex += 1
+            self._sink.push(self._convert(frame))
         except:
             sink = self._sink
             self._sink = None
@@ -213,7 +209,6 @@ class StorageService(_QtCore.QObject):
                 sink.terminate()
                 sink.wait() # do not check
             del sink
-        _LOGGER.info(f"seems to have dropped {self._dropped} frames")
 
     def is_running(self):
         """returns whether the storage service is currently running the encoder process."""

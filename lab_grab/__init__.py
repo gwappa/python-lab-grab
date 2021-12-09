@@ -25,7 +25,7 @@ import argparse as _ap
 
 import tisgrabber as _tisgrabber
 
-__VERSION__  = "0.6.1.2021120604"
+__VERSION__  = "0.7.0.2021120901"
 
 PARSER = _ap.ArgumentParser(description="grabs videos from an ImagingSource camera.")
 PARSER.add_argument("--debug", action="store_true",

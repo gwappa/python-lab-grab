@@ -59,7 +59,6 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
         session.acquisition.framerate.settingsChanged.connect(self.updateWithFrameRateSettings)
 
     def updateWithFormat(self, format_name):
-        ## TODO: merge with prepareForAcquisition()??
         if len(format_name) == 0:
             return
         fmt  = _utils.FrameFormat.from_name(format_name)
@@ -68,10 +67,9 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
         self._image.setImage(_np.zeros(dims, dtype=_np.uint8))
         # TODO: set transform to fit the image to the rect
 
-    def prepareForAcquisition(self, desc, store_frames=None):
-        dims = desc.shape
+    def prepareForAcquisition(self, desc, rotation, store_frames=None):
+        dims = rotation.transform_shape(desc.shape)
         self._scene.setSceneRect(_QtCore.QRectF(0.0, 0.0, float(dims[1]), float(dims[0])))
-
         img = _np.zeros(dims, dtype=desc.dtype)
         if desc.dtype == _np.uint8:
             self._levels = (0, 255)
@@ -91,7 +89,9 @@ class FrameView(_QtWidgets.QGraphicsView, _utils.SessionControl):
         else:
             self._every = 1
 
-    def updateWithFrame(self, frame_index, frame):
+    def updateWithFrame(self, frame):
+        # `frame` can be assumed to be non-None
+        # `frame` must have been already 'rotated'
         self._count += 1
         if self._count == self._every:
             self._image.setImage(frame, autoLevels=(self._levels is None))

@@ -131,13 +131,15 @@ try:
         def _updateWithClosingDevice(self):
             self._acquisition.updateWithDevice(None)
 
-        def _initializeAcquisition(self, descriptor, store_frames):
+        def _initializeAcquisition(self, descriptor, rotation, store_frames):
             if store_frames == True:
                 if (self._acquisition.framerate.auto == True) and (self._acquisition.framerate.force_preferred == False):
                     rate = self._acquisition.framerate.value
                 else:
                     rate = self._acquisition.framerate.preferred
-                self._storage.prepare(framerate=rate, descriptor=descriptor)
+                self._storage.prepare(framerate=rate,
+                                      descriptor=descriptor,
+                                      rotation=rotation)
                 self._control.frameReady.connect(self._storage.write)
 
         def _dealWithEncodingError(self, msg):

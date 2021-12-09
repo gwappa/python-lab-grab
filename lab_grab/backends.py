@@ -71,7 +71,7 @@ def test_decoder(codec):
             for line in proc.stderr.decode().split("\n"):
                 line = line.strip()
                 if len(line) > 0:
-                    _LOGGER.error(line)
+                    _LOGGER.debug(line)
         return (proc.returncode == 0) and outfile.exists()
     except:
         from traceback import print_exc

@@ -26,8 +26,8 @@ from collections import deque as _deque
 
 from pyqtgraph.Qt import QtCore as _QtCore
 
-from .. import logger as _logger
-from .. import backends as _backends
+from . import logger as _logger
+from . import backends as _backends
 
 _LOGGER = _logger()
 
@@ -56,16 +56,17 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
         # return len(self.quality_option(1)) > 0
         return sum(1 for _ in self.quality_option(1)) > 0
 
-    def as_ffmpeg_command(self, outpath, descriptor, framerate=30, quality=75):
+    def as_ffmpeg_command(self, outpath, descriptor, rotation, framerate=30, quality=75):
         """returns a list of options used to encode using the ffmpeg command."""
 
         ## FIXME: how shall we set e.g. the CRF value / bit rate?
+        shape = rotation.transform_shape(descriptor.shape)
         return _backends.ffmpeg_command(with_base_options=True) \
                 + _backends.ffmpeg_input_options(
-                    width=descriptor.width,
-                    height=descriptor.height,
+                    width=shape[1],
+                    height=shape[0],
                     framerate=framerate,
-                    pixel_format=descriptor.pixel_format.ffmpeg_style
+                    pixel_format=descriptor.color_format.ffmpeg_style
                 ) \
                 + [ "-vcodec", self.vcodec ] + self.quality_option(quality) \
                 + [
@@ -73,10 +74,10 @@ class Encoder(_namedtuple("_Encoder", ("name", "device", "suffix", "vcodec", "pi
                     str(outpath)
                 ]
 
-    def open_ffmpeg(self, outpath, descriptor, framerate=30, quality=75):
+    def open_ffmpeg(self, outpath, descriptor, rotation, framerate=30, quality=75):
         """opens and returns a `subprocess.Popen` object
         corresponding to the encoder process."""
-        return _sp.Popen(self.as_ffmpeg_command(outpath, descriptor, framerate, quality),
+        return _sp.Popen(self.as_ffmpeg_command(outpath, descriptor, rotation, framerate, quality),
                             stdin=_sp.PIPE)
 
 def no_quality_option(value):
@@ -101,17 +102,24 @@ MJPEG_CPU  = Encoder("MJPEG",     Devices.CPU,    ".avi", "mjpeg",      "yuvj420
 MJPEG_QSV  = Encoder("MJPEG",     Devices.QSV,    ".avi", "mjpeg_qsv",  "yuvj420p", mjpeg_quality_option)
 H264_NVENC = Encoder("H.264",     Devices.NVIDIA, ".avi", "h264_nvenc", "yuv420p",  h264_nvenc_quality_option)
 
-class Options(_namedtuple("_options", ("encoder", "path", "descriptor", "framerate", "quality"))):
+class Options(_namedtuple("_options", ("encoder",
+                                       "path",
+                                       "descriptor",
+                                       "rotation",
+                                       "framerate",
+                                       "quality"))):
     def __new__(cls,
                 encoder=None,
                 path=None,
                 descriptor=None,
+                rotation=None,
                 framerate=30,
                 quality=75):
         return super(Options, cls).__new__(cls,
                                            encoder=encoder,
                                            path=path,
                                            descriptor=descriptor,
+                                           rotation=rotation,
                                            framerate=framerate,
                                            quality=quality)
 
@@ -119,6 +127,7 @@ class Options(_namedtuple("_options", ("encoder", "path", "descriptor", "framera
         """returns (process, stream)"""
         proc = self.encoder.open_ffmpeg(self.path,
                                         descriptor=self.descriptor,
+                                        rotation=self.rotation,
                                         framerate=self.framerate,
                                         quality=self.quality)
         return proc, proc.stdin
