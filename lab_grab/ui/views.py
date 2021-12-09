@@ -28,8 +28,6 @@ from pyqtgraph.Qt import QtCore as _QtCore, \
                          QtGui as _QtGui, \
                          QtWidgets as _QtWidgets
 
-import tisgrabber as _tisgrabber
-
 from . import utils as _utils
 from .. import logger as _logger
 

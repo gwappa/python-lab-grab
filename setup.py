@@ -32,9 +32,7 @@ setuptools.setup(
     license='MIT',
     python_requires=">=3.7",
     install_requires=[
-        'ks-tisgrabber',
-        # python-opencv-headless,
-        # pyqtgraph
+        'pyqtgraph',
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',

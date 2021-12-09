@@ -258,4 +258,10 @@ try:
     from . import utils
 
 except ImportError:
+    APP = None
+    from .. import DEBUG
+    if DEBUG == True:
+        raise
+        
+if APP is None:
     raise RuntimeError("an error occurred while attempting to import 'pyqtgraph'. install it, or fix the installation.")
