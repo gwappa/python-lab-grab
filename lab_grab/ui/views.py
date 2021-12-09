@@ -486,6 +486,8 @@ class AcquisitionSettings(_utils.ViewGroup):
         session.acquisition.gamma.rangeChanged.connect(self.updateWithGammaRange)
         session.acquisition.gamma.settingsChanged.connect(self.updateWithGammaSettings)
 
+        session.acquisition.format.selectionChanged.connect(self.reinstateAllSettings)
+
         self.requestedAutoTriggerMode.connect(session.acquisition.framerate.setAuto)
         self.requestedFrameRateUpdate.connect(session.acquisition.framerate.setPreferred)
         self.requestedForcePreferredStatus.connect(session.acquisition.framerate.setForcePreferred)
@@ -503,6 +505,18 @@ class AcquisitionSettings(_utils.ViewGroup):
         for obj in (self._gain, self._autogain, self._gamma):
             obj.setEnabled(val)
         self._binning.setEnabled(False)
+
+    def reinstateAllSettings(self, *_):
+        """works as a hook to 'reinstate' settings when the frame format has been changed.
+        the argument(s) will never be used."""
+        self.dispatchTriggerStatusUpdate()
+        self.dispatchFrameRateUpdate()
+        self.dispatchForcePreferredUpdate()
+        self.dispatchAutoExposureUpdate()
+        self.dispatchExposureUpdate()
+        self.dispatchAutoGainUpdate()
+        self.dispatchGainUpdate()
+        self.dispatchGammaUpdate()
 
     def dispatchTriggerStatusUpdate(self, _=None): # the argument will never be used
         if self._updating == True:
