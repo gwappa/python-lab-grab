@@ -53,16 +53,15 @@ def parse_commandline():
     run(**vars(PARSER.parse_args()))
 
 def run(debug=False):
+    import sys
     global DEBUG
     if debug == True:
         DEBUG = True
     init_logger()
 
-    LOGGER.info(f"lab-grab version {__VERSION__}")
+    print(f"lab-grab version {__VERSION__}", file=sys.stderr, flush=True)
     if DEBUG == True:
-        LOGGER.info("")
-        LOGGER.info("  ========== DEBUG MODE ==========  ")
-        LOGGER.info("")
+        print("\n  ========== DEBUG MODE ==========  \n", file=sys.stderr, flush=True)
     from . import ui
     main = ui.MainWindow()
     # TODO: attempt to open the device in case it is not None
