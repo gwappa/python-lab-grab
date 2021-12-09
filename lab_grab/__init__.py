@@ -23,7 +23,7 @@
 import logging as _logging
 import argparse as _ap
 
-__VERSION__  = "0.7.0.2021120902"
+__VERSION__  = "0.7.1.2021120903"
 
 PARSER = _ap.ArgumentParser(description="grabs videos from an ImagingSource camera.")
 PARSER.add_argument("--debug", action="store_true",
